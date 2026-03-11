@@ -1,0 +1,91 @@
+<div class="bg-white dark:bg-[#1a222c] w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+    <div class="p-4 border-b border-gray-100 dark:border-[#2a3441] flex justify-between items-center bg-gray-50/50 dark:bg-[#111418]/50">
+        <div>
+            <h3 class="text-lg font-extrabold text-[#111418] dark:text-white pl-2">Editar Paleta</h3>
+            <p class="text-[9px] text-gray-400 font-mono pl-2 opacity-70" id="edit-palette-display-id"></p>
+        </div>
+        <button onclick="window.cerrarModalPaleta()" class="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-full transition-colors">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+    </div>
+    
+    <form id="formEditarPaleta" class="p-6">
+        <input type="hidden" name="id" id="edit-id">
+
+        <div class="mb-6">
+            <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-1 ml-1">Nombre de la paleta</label>
+            <input type="text" name="nombre" id="edit-nombre" required 
+                class="w-full bg-gray-100 dark:bg-[#111418] border-none rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            
+            <div class="space-y-1">
+                <label class="text-[10px] font-bold uppercase text-gray-400 ml-1">Primario</label>
+                <div class="flex items-center gap-2 bg-gray-50 dark:bg-[#111418] p-1.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <input type="color" data-for="primary_color" id="edit-color-primary_color" class="color-picker w-8 h-8 rounded-lg cursor-pointer border-none bg-transparent">
+                    <input type="text" name="primary_color" id="edit-text-primary_color" maxlength="7" class="hex-input w-full bg-transparent border-none text-xs font-mono focus:ring-0 uppercase p-0">
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <label class="text-[10px] font-bold uppercase text-gray-400 ml-1">Secundario</label>
+                <div class="flex items-center gap-2 bg-gray-50 dark:bg-[#111418] p-1.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <input type="color" data-for="secondary_color" id="edit-color-secondary_color" class="color-picker w-8 h-8 rounded-lg cursor-pointer border-none bg-transparent">
+                    <input type="text" name="secondary_color" id="edit-text-secondary_color" maxlength="7" class="hex-input w-full bg-transparent border-none text-xs font-mono focus:ring-0 uppercase p-0">
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <label class="text-[10px] font-bold uppercase text-gray-400 ml-1">Acento</label>
+                <div class="flex items-center gap-2 bg-gray-50 dark:bg-[#111418] p-1.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <input type="color" data-for="accent_color" id="edit-color-accent_color" class="color-picker w-8 h-8 rounded-lg cursor-pointer border-none bg-transparent">
+                    <input type="text" name="accent_color" id="edit-text-accent_color" maxlength="7" class="hex-input w-full bg-transparent border-none text-xs font-mono focus:ring-0 uppercase p-0">
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <label class="text-[10px] font-bold uppercase text-gray-400 ml-1">P. Oscuro</label>
+                <div class="flex items-center gap-2 bg-gray-50 dark:bg-[#111418] p-1.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <input type="color" data-for="primary_dark_color" id="edit-color-primary_dark_color" class="color-picker w-8 h-8 rounded-lg cursor-pointer border-none bg-transparent">
+                    <input type="text" name="primary_dark_color" id="edit-text-primary_dark_color" maxlength="7" class="hex-input w-full bg-transparent border-none text-xs font-mono focus:ring-0 uppercase p-0">
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <label class="text-[10px] font-bold uppercase text-gray-400 ml-1">Fondo Claro</label>
+                <div class="flex items-center gap-2 bg-gray-50 dark:bg-[#111418] p-1.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <input type="color" data-for="background_light_color" id="edit-color-background_light_color" class="color-picker w-8 h-8 rounded-lg cursor-pointer border-none bg-transparent">
+                    <input type="text" name="background_light_color" id="edit-text-background_light_color" maxlength="7" class="hex-input w-full bg-transparent border-none text-xs font-mono focus:ring-0 uppercase p-0">
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <label class="text-[10px] font-bold uppercase text-gray-400 ml-1">Fondo Oscuro</label>
+                <div class="flex items-center gap-2 bg-gray-50 dark:bg-[#111418] p-1.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <input type="color" data-for="background_dark_color" id="edit-color-background_dark_color" class="color-picker w-8 h-8 rounded-lg cursor-pointer border-none bg-transparent">
+                    <input type="text" name="background_dark_color" id="edit-text-background_dark_color" maxlength="7" class="hex-input w-full bg-transparent border-none text-xs font-mono focus:ring-0 uppercase p-0">
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <label class="text-[10px] font-bold uppercase text-gray-400 ml-1">Superficie Osc.</label>
+                <div class="flex items-center gap-2 bg-gray-50 dark:bg-[#111418] p-1.5 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <input type="color" data-for="surface_dark_color" id="edit-color-surface_dark_color" class="color-picker w-8 h-8 rounded-lg cursor-pointer border-none bg-transparent">
+                    <input type="text" name="surface_dark_color" id="edit-text-surface_dark_color" maxlength="7" class="hex-input w-full bg-transparent border-none text-xs font-mono focus:ring-0 uppercase p-0">
+                </div>
+            </div>
+
+        </div>
+
+        <div class="mt-8 flex gap-3">
+            <button type="button" onclick="window.cerrarModalPaleta()" class="flex-1 py-3 text-xs font-bold text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-all">
+                Cancelar
+            </button>
+            <button type="submit" class="flex-[2] py-3 text-xs font-bold bg-primary text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-sm">save</span>
+                Actualizar Cambios
+            </button>
+        </div>
+    </form>
+</div>

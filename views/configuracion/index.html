@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Configuración | App</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script type="module">
+        import { aplicarTailwind } from '../../js/config/tailwindConfig.js';
+        aplicarTailwind();
+    </script>
+</head>
+
+<body
+    class="font-display bg-background-light dark:bg-background-dark text-[#111418] dark:text-white min-h-screen flex flex-col">
+
+    <main class="flex-1 flex flex-col p-6 md:px-12 lg:px-20 max-w-5xl mx-auto w-full">
+
+        <div class="flex flex-col gap-6 mb-10">
+            <div class="flex flex-col gap-2">
+                <h1 class="text-[#111418] dark:text-white text-3xl font-bold tracking-tight">Configuración del Sistema
+                </h1>
+                <p class="text-[#637588] dark:text-[#9ca3af] text-base">Administra las preferencias visuales y
+                    parámetros globales.</p>
+            </div>
+
+            <div
+                class="bg-white dark:bg-[#1a222c] border border-[#dbe0e6] dark:border-[#2a3441] rounded-xl p-1.5 flex flex-col md:flex-row shadow-sm">
+                <div class="relative flex-1 group">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span class="material-symbols-outlined text-[#637588] dark:text-[#9ca3af]"
+                            style="font-size: 20px;">search</span>
+                    </div>
+                    <input id="searchConfig"
+                        class="block w-full rounded-lg border-none bg-transparent py-2.5 pl-10 pr-4 text-[#111418] dark:text-white placeholder-[#637588] focus:ring-0 sm:text-sm"
+                        placeholder="Buscar configuración..." type="text" />
+                </div>
+            </div>
+        </div>
+
+        <section class="mb-14">
+            <div class="flex justify-between items-center mb-6">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">palette</span>
+                    <h2 class="text-xl font-bold text-[#111418] dark:text-white">Paletas de Colores</h2>
+                </div>
+                <button onclick="window.abrirModalPaleta()"
+                    class="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-bold rounded-xl hover:opacity-90 transition-all shadow-sm">
+                    <span class="material-symbols-outlined text-[20px]">add</span>
+                    Nueva Paleta
+                </button>
+            </div>
+
+            <div id="paletasContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="col-span-full flex flex-col items-center py-10 text-[#637588]">
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mb-2"></div>
+                    <p>Cargando paletas...</p>
+                </div>
+            </div>
+        </section>
+
+        <hr class="border-[#dbe0e6] dark:border-[#2a3441] mb-10">
+
+        <section>
+            <div class="flex items-center gap-2 mb-6">
+                <span class="material-symbols-outlined text-primary">settings</span>
+                <h2 class="text-xl font-bold text-[#111418] dark:text-white">Parámetros Generales</h2>
+            </div>
+
+            <div id="settingsContainer" class="space-y-10">
+                <div class="flex flex-col items-center justify-center py-20 text-[#637588]">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+                    <p>Cargando ajustes del sistema...</p>
+                </div>
+            </div>
+        </section>
+
+        <div
+            class="mt-12 pt-6 border-t border-[#dbe0e6] dark:border-[#2a3441] flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-[#637588] dark:text-[#9ca3af]">
+            <p>Total de ajustes activos: <span class="font-bold text-[#111418] dark:text-white"
+                    id="count-current">0</span></p>
+            <p>© 2026 Sistema de Configuración</p>
+        </div>
+    </main>
+
+    <div id="modalNuevaPaleta"
+        class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4 transition-all duration-300">
+    </div>
+
+    <script type="module">
+        import { configuracionFrontendController } from '../../js/controllers/configuracionFrontendController.js';
+        import { paletaColorController } from '../../js/controllers/paletaColorController.js';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            configuracionFrontendController.inicializarIndex();
+            paletaColorController.inicializar();
+        });
+
+        /**
+         * NOTA: No es necesario definir abrirModalPaleta aquí de nuevo
+         * ya que el controlador paletaColorController.js ya lo expone a window
+         * al final de su archivo.
+         */
+    </script>
+</body>
+
+</html>
