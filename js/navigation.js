@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!sesionActiva) return; // Detiene la ejecución si no está autorizado
 
     // --- 0.1 CARGAR DATOS DEL USUARIO EN LA UI ---
-   // --- CARGAR DATOS DEL USUARIO EN LA UI ---
+    // --- CARGAR DATOS DEL USUARIO EN LA UI ---
     const perfil = sesionActiva.perfil;
     const userNameDisplay = document.querySelector('.sidebar-hide p.text-slate-800.text-sm.font-bold');
     const userRoleDisplay = document.querySelector('.sidebar-hide p.text-slate-500.text-\\[11px\\]');
@@ -106,14 +106,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     inyectarEstilosGlobales();
 
-    // --- LÓGICA DE UI: SIDEBAR (Corregida para alineación) ---
+    // --- LÓGICA DE UI: SIDEBAR (Centrado de logo completo) ---
     window.sidebarController = {
         toggle() {
             const sidebar = document.getElementById('main-sidebar');
             const icon = document.getElementById('sidebar-icon');
             const logoImg = document.getElementById('sidebar-logo');
+            const logoContainer = logoImg?.parentElement; // El div superior h-12
 
-            // Intentamos capturar los contenedores de perfil y logout para alinearlos
             const profileWrapper = sidebar.querySelector('.flex.items-center.bg-white.rounded-xl') || sidebar.querySelector('aside .p-4 div:has(img)');
             const logoutBtn = document.querySelector('button[title="Cerrar Sesión"]');
 
@@ -121,31 +121,43 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (isColapsed) {
                 sidebar.classList.remove('w-[280px]');
-                sidebar.classList.add('sidebar-colapsado'); // Clase de control para CSS
+                sidebar.classList.add('sidebar-colapsado');
                 icon.innerText = 'chevron_right';
 
                 if (logoImg) {
-                    logoImg.src = 'images/favicon.png';
-                    logoImg.classList.add('h-8');
+                    logoImg.src = 'images/logo-cosmos-icon.png';
+                    logoImg.classList.replace('h-10', 'h-16');
+
+                    if (logoContainer) {
+                        // Mantenemos el centrado cuando está colapsado
+                        logoContainer.classList.replace('h-12', 'h-20');
+                        logoContainer.classList.replace('justify-start', 'justify-center');
+                    }
                 }
 
                 if (profileWrapper) profileWrapper.classList.add('profile-wrapper');
                 if (logoutBtn) logoutBtn.classList.add('logout-btn');
-
                 document.querySelectorAll('.sidebar-hide').forEach(el => el.classList.add('hidden'));
+
             } else {
                 sidebar.classList.add('w-[280px]');
                 sidebar.classList.remove('sidebar-colapsado');
                 icon.innerText = 'chevron_left';
 
                 if (logoImg) {
-                    logoImg.src = 'images/logo.png';
-                    logoImg.classList.remove('h-8');
+                    logoImg.src = 'images/logo-cosmos.png';
+                    // Respetamos tu tamaño h-10 para el logo con letras
+                    logoImg.classList.replace('h-16', 'h-10');
+
+                    if (logoContainer) {
+                        // CLAVE: Restauramos h-12 pero cambiamos a justify-center
+                        logoContainer.classList.replace('h-20', 'h-12');
+                        logoContainer.classList.replace('justify-start', 'justify-center'); // CENTRADO CUANDO ESTÁ ABIERTO
+                    }
                 }
 
                 if (profileWrapper) profileWrapper.classList.remove('profile-wrapper');
                 if (logoutBtn) logoutBtn.classList.remove('logout-btn');
-
                 document.querySelectorAll('.sidebar-hide').forEach(el => el.classList.remove('hidden'));
             }
         }
