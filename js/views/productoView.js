@@ -7,10 +7,10 @@ export const productoView = {
         categoriasSeleccionadas: [],
         orden: 'desc',
         paginaActual: 1,
-        filasPorPagina: 10
+        filasPorPagina: 10,
+        seleccionados: []
     },
 
-    // --- MÉTODOS DE NOTIFICACIÓN ---
     notificarExito(mensaje) {
         Swal.fire({
             icon: 'success',
@@ -54,25 +54,29 @@ export const productoView = {
         return coloresSeguros[Math.abs(hash) % coloresSeguros.length];
     },
 
-    /**
-     * RENDER PRINCIPAL
-     */
+    _capitalizarPrimera(texto) {
+        if (!texto) return '';
+        return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
+    },
+
     render(productos, todasLasCategorias = []) {
         const contenedor = document.getElementById('content-area');
         if (!contenedor) return;
 
-        // --- PRESERVACIÓN DE FOCO ---
         const activeElementId = document.activeElement ? document.activeElement.id : null;
         const cursorPosition = document.activeElement ? document.activeElement.selectionStart : null;
 
         if (todasLasCategorias.length > 0) {
-            this._categoriasDisponibles = todasLasCategorias.map(c => c.nombre || c).filter(Boolean);
+            this._categoriasDisponibles = [
+                ...new Set(todasLasCategorias.map(c => c.nombre).filter(Boolean))
+            ].sort((a, b) => a.localeCompare(b));
             this._maestroCategorias = todasLasCategorias;
         } else {
             this._categoriasDisponibles = [...new Set(productos.map(p => p.nombre_categoria).filter(Boolean))];
         }
 
         let filtrados = this._ordenarDatos(this._filtrarDatos(productos));
+        window._productosFiltrados = filtrados;
 
         const todosConWhatsapp = filtrados.length > 0 && filtrados.every(p => p.habilitar_whatsapp);
         const todosConPrecio = filtrados.length > 0 && filtrados.every(p => p.mostrar_precio);
@@ -93,19 +97,19 @@ export const productoView = {
 
                 <div class="bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 mb-6 space-y-4">
                     <div class="flex flex-wrap items-center gap-4">
-                        <div class="relative flex-1 min-w-[280px]">
-                            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                        <div class="relative flex items-center flex-1 min-w-[280px]">
+                            <span class="material-symbols-outlined absolute left-4 text-slate-400">search</span>
                             <input type="text" 
                                    id="main-search-input"
                                    oninput="productoView.gestionarBusqueda(this.value)" 
                                    value="${this._estado.busqueda}"
                                    class="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-12 text-sm outline-none focus:ring-2 focus:ring-blue-500/10 font-medium transition-all" 
                                    placeholder="Buscar por nombre, categoría o subcategoría...">
-                            ${this._estado.busqueda ? `
-                                <button onclick="productoView.limpiarBusquedaRapida()" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500 transition-colors">
-                                    <span class="material-symbols-outlined text-lg">cancel</span>
-                                </button>
-                            ` : ''}
+                            <button id="btn-limpiar-main-search"
+                                    onclick="productoView.limpiarBusquedaRapida()"
+                                    class="${this._estado.busqueda ? '' : 'hidden'} absolute right-4 text-slate-300 hover:text-red-500 transition-colors flex items-center justify-center">
+                                <span class="material-symbols-outlined text-lg">cancel</span>
+                            </button>
                         </div>
 
                         <div class="relative w-full md:w-80">
@@ -149,7 +153,15 @@ export const productoView = {
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="bg-slate-50/80">
-                                    <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase w-20 text-center">N°</th>
+                                    <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase w-32 text-center">
+                                        <div class="flex items-center justify-center gap-2 cursor-pointer"
+                                            onclick="productoView.toggleSeleccionTodos(window._productosFiltrados || [])">
+                                            <input type="checkbox"
+                                                id="checkbox-header"
+                                                class="w-4 h-4 rounded accent-blue-600 cursor-pointer pointer-events-none">
+                                            <span class="text-[9px] font-black text-slate-400 uppercase tracking-wide whitespace-nowrap">Selec. todo</span>
+                                        </div>
+                                    </th>
                                     <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase">Producto / Categoría Padre</th>
                                     <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase text-center">Precio</th>
                                     <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase text-center">Stock</th>
@@ -166,9 +178,13 @@ export const productoView = {
                     ${this._generarPaginacion(filtrados.length)}
                 </div>
             </div>
+            ${this._renderBarraFlotante()}
         `;
 
-        // RE-APLICAR FOCO Y POSICIÓN DEL CURSOR TRAS EL RENDER
+        // Restaurar estado de barra y checkbox header tras render
+        this._actualizarBarraFlotante();
+        this._actualizarCheckboxHeader();
+
         if (activeElementId) {
             setTimeout(() => {
                 const element = document.getElementById(activeElementId);
@@ -181,7 +197,6 @@ export const productoView = {
             }, 0);
         }
 
-        // Listener para cerrar paneles de sugerencias al hacer clic fuera
         document.addEventListener('click', (e) => {
             const panel = document.getElementById('suggestions-panel');
             const input = document.getElementById('category-search-input');
@@ -191,19 +206,33 @@ export const productoView = {
         });
     },
 
-    // --- TABLA Y FILAS ---
     _generarFilas(datos) {
         const inicio = (this._estado.paginaActual - 1) * this._estado.filasPorPagina;
         const paged = datos.slice(inicio, inicio + this._estado.filasPorPagina);
+
+        if (paged.length === 0) return `
+            <tr><td colspan="8" class="px-6 py-12 text-center text-slate-400 italic text-sm">
+                No se encontraron productos
+            </td></tr>`;
 
         return paged.map((p, i) => {
             const dataEnc = btoa(unescape(encodeURIComponent(JSON.stringify(p))));
             const nombreMostrarCat = p.categoria_padre_nombre || 'General';
             const colorCat = this._obtenerColorCategoria(nombreMostrarCat);
+            const estaSeleccionado = this._estado.seleccionados.includes(p.id);
 
             return `
-                <tr class="hover:bg-blue-50/40 transition-colors group">
-                    <td class="px-6 py-5 text-center text-xs font-bold text-slate-400">${inicio + i + 1}</td>
+                <tr class="hover:bg-blue-50/40 transition-colors group ${estaSeleccionado ? 'bg-blue-50/60' : ''}">
+                    <td class="px-6 py-5 text-center text-xs font-bold text-slate-400">
+                        <div class="flex items-center justify-center gap-3">
+                            <input type="checkbox"
+                                   class="fila-checkbox w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                                   data-id="${p.id}"
+                                   ${estaSeleccionado ? 'checked' : ''}
+                                   onchange="productoView.toggleSeleccion('${p.id}')">
+                            <span>${inicio + i + 1}</span>
+                        </div>
+                    </td>
                     <td class="px-6 py-5">
                         <div class="flex items-center gap-3">
                             <img src="${p.imagen_url}" class="h-11 w-11 rounded-xl object-cover border border-slate-100 shadow-sm">
@@ -230,10 +259,10 @@ export const productoView = {
                                     class="w-9 h-9 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
                                 <span class="material-symbols-outlined text-sm">edit</span>
                             </button>
-                           <button onclick="productoController.verDetalle('${p.id}')" 
-                                class="w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
-                            <span class="material-symbols-outlined text-sm">visibility</span>
-                        </button>
+                            <button onclick="productoController.verDetalle('${p.id}')" 
+                                    class="w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
+                                <span class="material-symbols-outlined text-sm">visibility</span>
+                            </button>
                             <button onclick="productoView.confirmarEliminacion('${dataEnc}')" 
                                     class="w-9 h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-600 hover:text-white transition-all shadow-sm">
                                 <span class="material-symbols-outlined text-sm">delete</span>
@@ -297,7 +326,6 @@ export const productoView = {
 
     confirmarCambioSwitch(id, campo, valorActual, esGlobal, nombre) {
         const nuevoEstado = !valorActual;
-
         const esWhatsApp = campo === 'ws_active' || campo === 'habilitar_whatsapp';
         const etiquetaFeature = esWhatsApp ? 'WhatsApp' : 'Precio';
         const accionClave = nuevoEstado ? 'ACTIVAR' : 'DESACTIVAR';
@@ -307,7 +335,6 @@ export const productoView = {
         if (esGlobal) {
             const fuenteDatos = window.productosRaw || [];
             const filtrados = this._filtrarDatos(fuenteDatos);
-
             const productosAActualizar = filtrados.filter(p => p[campo] !== nuevoEstado);
             const cantidad = productosAActualizar.length;
             const idsParaActualizar = productosAActualizar.map(p => p.id);
@@ -397,7 +424,7 @@ export const productoView = {
                 <span class="text-[10px] font-black text-slate-400 uppercase mr-2">Filtros Activos:</span>
                 ${this._estado.categoriasSeleccionadas.map(cat => `
                     <div class="flex items-center gap-2 bg-blue-600 text-white pl-3 pr-1 py-1 rounded-full text-[11px] font-bold shadow-sm">
-                        ${cat.toUpperCase()}
+                        ${this._capitalizarPrimera(cat)}
                         <button onclick="productoView.quitarFiltroCategoria('${cat}')" class="hover:bg-blue-500 rounded-full w-5 h-5 flex items-center justify-center transition-colors">
                             <span class="material-symbols-outlined text-sm">close</span>
                         </button>
@@ -411,15 +438,18 @@ export const productoView = {
     filtrarSugerencias(query) {
         const panel = document.getElementById('suggestions-panel');
         if (!panel) return;
+
         const coincidencias = this._categoriasDisponibles.filter(cat =>
             cat.toLowerCase().includes(query.toLowerCase()) &&
             !this._estado.categoriasSeleccionadas.includes(cat)
         );
+
         if (coincidencias.length > 0) {
             panel.classList.remove('hidden');
             panel.innerHTML = coincidencias.map(cat => `
-                <div onclick="productoView.agregarFiltroCategoria('${cat}')" class="px-4 py-3 hover:bg-blue-50 rounded-xl cursor-pointer text-sm font-medium text-slate-700 transition-colors">
-                    ${cat}
+                <div onclick="productoView.agregarFiltroCategoria('${cat}')" 
+                     class="px-4 py-3 hover:bg-blue-50 rounded-xl cursor-pointer text-sm font-medium text-slate-700 transition-colors">
+                    ${this._capitalizarPrimera(cat)}
                 </div>
             `).join('');
         } else {
@@ -431,6 +461,7 @@ export const productoView = {
 
     _filtrarDatos(d) {
         let resultados = [...d];
+
         if (this._estado.busqueda) {
             const t = this._estado.busqueda.toLowerCase();
             resultados = resultados.filter(x =>
@@ -439,13 +470,18 @@ export const productoView = {
                 (x.categoria_padre_nombre && x.categoria_padre_nombre.toLowerCase().includes(t))
             );
         }
+
         if (this._estado.categoriasSeleccionadas.length > 0) {
-            resultados = resultados.filter(x =>
-                this._estado.categoriasSeleccionadas.includes(x.nombre_categoria) ||
-                this._estado.categoriasSeleccionadas.includes(x.categoria_nombre) ||
-                this._estado.categoriasSeleccionadas.includes(x.categoria_padre_nombre)
-            );
+            resultados = resultados.filter(x => {
+                const todasCats = x._todas_categorias || [];
+                const todosPadres = x._todos_padres || [];
+                return this._estado.categoriasSeleccionadas.some(seleccionada =>
+                    todasCats.includes(seleccionada) ||
+                    todosPadres.includes(seleccionada)
+                );
+            });
         }
+
         return resultados;
     },
 
@@ -458,6 +494,230 @@ export const productoView = {
         );
     },
 
+    // ==========================================
+    // SELECCIÓN POR LOTES
+    // ==========================================
+
+    toggleSeleccion(id) {
+        const idStr = String(id);
+        const idx = this._estado.seleccionados.indexOf(idStr);
+        if (idx === -1) {
+            this._estado.seleccionados.push(idStr);
+        } else {
+            this._estado.seleccionados.splice(idx, 1);
+        }
+        const fila = document.querySelector(`.fila-checkbox[data-id="${idStr}"]`)?.closest('tr');
+        if (fila) fila.classList.toggle('bg-blue-50/60', this._estado.seleccionados.includes(idStr));
+
+        this._actualizarBarraFlotante();
+        this._actualizarCheckboxHeader();
+    },
+
+    toggleSeleccionTodos(filtrados) {
+        const todosIds = filtrados.map(p => String(p.id));
+        const todosSeleccionados = todosIds.every(id => this._estado.seleccionados.includes(id));
+
+        if (todosSeleccionados) {
+            this._estado.seleccionados = [];
+        } else {
+            this._estado.seleccionados = [...todosIds];
+        }
+
+        document.querySelectorAll('.fila-checkbox').forEach(cb => {
+            const seleccionado = this._estado.seleccionados.includes(cb.dataset.id);
+            cb.checked = seleccionado;
+            const fila = cb.closest('tr');
+            if (fila) fila.classList.toggle('bg-blue-50/60', seleccionado);
+        });
+
+        this._actualizarBarraFlotante();
+        this._actualizarCheckboxHeader();
+    },
+
+    _actualizarCheckboxHeader() {
+        const chkHeader = document.getElementById('checkbox-header');
+        if (!chkHeader) return;
+        const filtrados = this._ordenarDatos(this._filtrarDatos(window.productosRaw || []));
+        const todosIds = filtrados.map(p => String(p.id));
+        const seleccionados = this._estado.seleccionados;
+        chkHeader.checked = todosIds.length > 0 && todosIds.every(id => seleccionados.includes(id));
+        chkHeader.indeterminate = seleccionados.length > 0 && !chkHeader.checked;
+    },
+    _actualizarBarraFlotante() {
+        const barra = document.getElementById('barra-acciones-lote');
+        const contador = document.getElementById('lote-contador');
+        const cantidad = this._estado.seleccionados.length;
+
+        if (!barra) return;
+
+        if (cantidad > 0) {
+            barra.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
+            barra.classList.add('translate-y-0', 'opacity-100');
+        } else {
+            barra.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
+            barra.classList.remove('translate-y-0', 'opacity-100');
+        }
+
+        if (contador) contador.textContent = cantidad;
+    },
+
+    _renderBarraFlotante() {
+        return `
+        <div id="barra-acciones-lote"
+             class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 
+                    translate-y-full opacity-0 pointer-events-none
+                    transition-all duration-300 ease-out">
+            <div class="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-5 py-3 rounded-2xl shadow-2xl">
+                
+                <div class="flex items-center gap-2 pr-4 border-r border-slate-200">
+                    <div class="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
+                        <span class="material-symbols-outlined text-white text-[16px]">checklist</span>
+                    </div>
+                    <div class="flex flex-col leading-none">
+                        <span class="text-[9px] font-black text-slate-400 uppercase">Seleccionados</span>
+                        <span class="text-sm font-black text-slate-800"><span id="lote-contador">0</span> ítems</span>
+                    </div>
+                </div>
+
+                <button onclick="productoView.accionLote('whatsapp', true)"
+                        title="Activar WhatsApp"
+                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all text-[10px] font-black uppercase whitespace-nowrap">
+                    <i class="fa-brands fa-whatsapp text-[15px]"></i>
+                    Activar WS
+                </button>
+
+                <button onclick="productoView.accionLote('whatsapp', false)"
+                        title="Desactivar WhatsApp"
+                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all text-[10px] font-black uppercase whitespace-nowrap">
+                    <span class="relative inline-flex items-center justify-center w-4 h-4">
+                        <i class="fa-brands fa-whatsapp text-[15px]"></i>
+                        <span class="material-symbols-outlined text-[13px] absolute -top-1 -right-2 text-red-500">block</span>
+                    </span>
+                    Desactivar WS
+                </button>
+
+                <button onclick="productoView.accionLote('precio', true)"
+                        title="Mostrar precio"
+                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all text-[10px] font-black uppercase whitespace-nowrap">
+                    <span class="material-symbols-outlined text-[16px]">payments</span>
+                    Mostrar precio
+                </button>
+
+                <button onclick="productoView.accionLote('precio', false)"
+                        title="Ocultar precio"
+                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-700 hover:text-white hover:border-slate-700 transition-all text-[10px] font-black uppercase whitespace-nowrap">
+                    <span class="material-symbols-outlined text-[16px]">money_off</span>
+                    Ocultar precio
+                </button>
+
+                <div class="w-px h-8 bg-slate-200 mx-1"></div>
+
+                <button onclick="productoView.accionLote('eliminar')"
+                        title="Eliminar seleccionados"
+                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all text-[10px] font-black uppercase whitespace-nowrap">
+                    <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
+                    Eliminar
+                </button>
+
+                <button onclick="productoView.limpiarSeleccion()"
+                        title="Cancelar selección"
+                        class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-all ml-1 border border-slate-200">
+                    <span class="material-symbols-outlined text-[18px]">close</span>
+                </button>
+            </div>
+        </div>
+    `;
+    },
+
+    async accionLote(tipo, valor = null) {
+        const ids = [...this._estado.seleccionados];
+        if (ids.length === 0) return;
+        const cantidad = ids.length;
+
+        if (tipo === 'eliminar') {
+            const confirm = await Swal.fire({
+                title: `<span class="text-red-600 font-black uppercase text-sm">¿Eliminar ${cantidad} producto${cantidad > 1 ? 's' : ''}?</span>`,
+                text: 'Esta acción no se puede deshacer.',
+                icon: 'warning',
+                showCancelButton: true,
+                reverseButtons: true,
+                confirmButtonText: `SÍ, ELIMINAR (${cantidad})`,
+                cancelButtonText: 'CANCELAR',
+                confirmButtonColor: '#dc2626',
+                customClass: {
+                    popup: 'rounded-[32px] shadow-2xl',
+                    confirmButton: 'rounded-xl px-6 py-3 font-bold text-xs uppercase',
+                    cancelButton: 'rounded-xl px-6 py-3 font-bold text-xs uppercase bg-slate-100 text-slate-500'
+                }
+            });
+
+            if (!confirm.isConfirmed) return;
+
+            Swal.fire({
+                title: '<span class="text-slate-800 font-black uppercase text-sm">Eliminando...</span>',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading(),
+                customClass: { popup: 'rounded-[32px] shadow-xl' }
+            });
+
+            // ✅ Pasa por el controller igual que carrusel y categorías
+            const resultado = await window.productoController.eliminarLote(ids);
+
+            Swal.close();
+
+            if (resultado.exito) {
+                this.limpiarSeleccion();
+                this.notificarExito(`${cantidad} producto${cantidad > 1 ? 's' : ''} eliminado${cantidad > 1 ? 's' : ''} correctamente`);
+                window.productoController._refrescoSilencioso();
+            } else {
+                this.notificarError('Ocurrió un error al eliminar: ' + resultado.mensaje);
+            }
+            return;
+        }
+
+        // Activar/Desactivar WhatsApp o Precio
+        const campo = tipo === 'whatsapp' ? 'habilitar_whatsapp' : 'mostrar_precio';
+        const etiqueta = tipo === 'whatsapp' ? 'WhatsApp' : 'Precio';
+        const accion = valor ? 'Activar' : 'Desactivar';
+
+        const confirm = await Swal.fire({
+            title: `<span class="text-slate-800 font-black uppercase text-sm">¿${accion} ${etiqueta}?</span>`,
+            text: `Se aplicará a ${cantidad} producto${cantidad > 1 ? 's' : ''} seleccionado${cantidad > 1 ? 's' : ''}.`,
+            icon: 'question',
+            showCancelButton: true,
+            reverseButtons: true,
+            confirmButtonText: `SÍ, ${accion.toUpperCase()} (${cantidad})`,
+            cancelButtonText: 'CANCELAR',
+            confirmButtonColor: valor ? '#10b981' : '#3b82f6',
+            customClass: {
+                popup: 'rounded-[32px] shadow-2xl',
+                confirmButton: 'rounded-xl px-6 py-3 font-bold text-xs uppercase',
+                cancelButton: 'rounded-xl px-6 py-3 font-bold text-xs uppercase bg-slate-100 text-slate-500'
+            }
+        });
+
+        if (!confirm.isConfirmed) return;
+
+        await window.productoController.toggleMasivoFiltrado(campo, valor, ids);
+        this.limpiarSeleccion();
+    },
+
+    limpiarSeleccion() {
+        this._estado.seleccionados = [];
+        document.querySelectorAll('.fila-checkbox').forEach(cb => {
+            cb.checked = false;
+            const fila = cb.closest('tr');
+            if (fila) fila.classList.remove('bg-blue-50/60');
+        });
+        const chkHeader = document.getElementById('checkbox-header');
+        if (chkHeader) { chkHeader.checked = false; chkHeader.indeterminate = false; }
+        this._actualizarBarraFlotante();
+    },
+
+    // ==========================================
+    // ACCIONES DIRECTAS
+    // ==========================================
+
     agregarFiltroCategoria(cat) {
         if (!this._estado.categoriasSeleccionadas.includes(cat)) {
             this._estado.categoriasSeleccionadas.push(cat);
@@ -466,13 +726,45 @@ export const productoView = {
             productoController.refrescarVista();
         }
     },
-    quitarFiltroCategoria(cat) { this._estado.categoriasSeleccionadas = this._estado.categoriasSeleccionadas.filter(c => c !== cat); productoController.refrescarVista(); },
-    limpiarFiltros() { this._estado.categoriasSeleccionadas = []; this._estado.busqueda = ''; productoController.refrescarVista(); },
+
+    quitarFiltroCategoria(cat) {
+        this._estado.categoriasSeleccionadas = this._estado.categoriasSeleccionadas.filter(c => c !== cat);
+        productoController.refrescarVista();
+    },
+
+    limpiarFiltros() {
+        this._estado.categoriasSeleccionadas = [];
+        this._estado.busqueda = '';
+        productoController.refrescarVista();
+    },
+
     verFichaDetalle(id) { productoController.verDetalle(id); },
-    gestionarBusqueda(v) { this._estado.busqueda = v; this._estado.paginaActual = 1; productoController.refrescarVista(); },
-    gestionarOrden() { this._estado.orden = this._estado.orden === 'asc' ? 'desc' : 'asc'; productoController.refrescarVista(); },
-    cambiarPagina(p) { this._estado.paginaActual = p; productoController.refrescarVista(); },
-    _ordenarDatos(d) { return [...d].sort((a, b) => this._estado.orden === 'asc' ? a.nombre.localeCompare(b.nombre) : b.nombre.localeCompare(a.nombre)); }
+
+    gestionarBusqueda(v) {
+        this._estado.busqueda = v;
+        this._estado.paginaActual = 1;
+        const btnLimpiar = document.getElementById('btn-limpiar-main-search');
+        if (btnLimpiar) btnLimpiar.classList.toggle('hidden', !v);
+        productoController.refrescarVista();
+    },
+
+    gestionarOrden() {
+        this._estado.orden = this._estado.orden === 'asc' ? 'desc' : 'asc';
+        productoController.refrescarVista();
+    },
+
+    cambiarPagina(p) {
+        this._estado.paginaActual = p;
+        productoController.refrescarVista();
+    },
+
+    _ordenarDatos(d) {
+        return [...d].sort((a, b) =>
+            this._estado.orden === 'asc'
+                ? a.nombre.localeCompare(b.nombre)
+                : b.nombre.localeCompare(a.nombre)
+        );
+    }
 };
 
 window.productoView = productoView;

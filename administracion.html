@@ -66,7 +66,7 @@
                 </div>
                 <div class="mt-4 px-1 sidebar-hide">
                     <p class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] opacity-70">
-                        Admin Suite v1.0
+                        V 2.0.0
                     </p>
                 </div>
             </div>
@@ -103,7 +103,7 @@
                         </div>
                     </details>
 
-                    <details class="group px-1">
+                    <details id="sidebar-details-categorias" class="group px-1">
                         <summary
                             class="flex items-center justify-between rounded-lg px-3 py-2.5 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-all cursor-pointer list-none">
                             <div onclick="event.preventDefault(); categoriasController.inicializar('categorias')"
@@ -125,7 +125,7 @@
                         </div>
                     </details>
 
-                    <details class="group px-1">
+                    <details id="sidebar-details-subcategorias" class="group px-1">
                         <summary
                             class="flex items-center justify-between rounded-lg px-3 py-2.5 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-all cursor-pointer list-none">
                             <div onclick="event.preventDefault(); categoriasController.inicializar('subcategorias')"
@@ -170,7 +170,7 @@
                         </summary>
 
                         <div class="flex flex-col gap-1 mt-1 ml-4 pl-4 border-l-2 border-slate-100 sidebar-hide">
-                            <button onclick="RegisterCarrusel.start('tu-contenedor-id')"
+                            <button onclick="carruselController.abrirEditor()"
                                 class="flex items-center gap-3 rounded-lg px-3 py-1.5 text-slate-400 hover:text-blue-500 transition-all text-[10px] font-bold uppercase">
                                 <span class="material-symbols-outlined text-[16px]">add_circle</span>
                                 Nuevo Carrusel

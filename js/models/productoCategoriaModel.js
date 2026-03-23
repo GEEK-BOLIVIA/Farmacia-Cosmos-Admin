@@ -1,16 +1,7 @@
 import { supabase } from '../config/supabaseClient.js';
 
-/**
- * Modelo para la tabla intermedia producto_categorias_rel
- * Maneja la relación Muchos a Muchos entre Productos y Categorías.
- */
 export const productoCategoriaModel = {
 
-    /**
-     * Vincula un producto con una categoría.
-     * @param {number} productoId 
-     * @param {number} categoriaId 
-     */
     async vincular(productoId, categoriaId) {
         try {
             const { error } = await supabase
@@ -102,12 +93,12 @@ export const productoCategoriaModel = {
         try {
             // 1. Borramos las existentes
             await this.desvincularTodo(productoId);
-            
+
             // 2. Si hay nuevas, las vinculamos
             if (nuevasCategoriasIds && nuevasCategoriasIds.length > 0) {
                 return await this.vincularMultiple(productoId, nuevasCategoriasIds);
             }
-            
+
             return { exito: true };
         } catch (err) {
             console.error('Error al actualizar relaciones:', err.message);

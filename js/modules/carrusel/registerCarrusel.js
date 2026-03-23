@@ -7,29 +7,27 @@ export const RegisterCarrusel = {
     _originalContent: null,
     _isEdit: false,
 
-    /**
-     * Punto de entrada principal
-     */
     async init(containerId, data = null) {
         this._container = document.getElementById(containerId);
         this._originalContent = this._container.innerHTML;
         this._isEdit = !!data;
 
-        // Inicializamos el estado con los datos o vacío
         carruselState.init(data?.id || null, data);
 
-        // --- ACTUALIZACIÓN CRÍTICA ---
-        // Exponemos las acciones al objeto global window para que el HTML las reconozca
         window.carruselActions = carruselActions;
         window.RegisterCarrusel = this;
 
         this.updateUI();
+
+        // ✅ Solo para carruseles nuevos: calcular orden automático con el slug por defecto
+        if (!this._isEdit) {
+            const slugInicial = carruselState.config.ubicacion_slug || 'home-top';
+            await this.actualizarOrdenAutomatico(slugInicial);
+        }
+
         window.scrollTo({ top: 0, behavior: 'smooth' });
     },
 
-    /**
-     * Refresca la pantalla basándose en el estado actual
-     */
     updateUI() {
         this._container.innerHTML = carruselTemplates.renderMain(
             this._isEdit,
@@ -39,264 +37,159 @@ export const RegisterCarrusel = {
         );
     },
 
-    // --- NAVEGACIÓN ---
+    cambiarPaso(n) { carruselState._paso = n; this.updateUI(); },
 
-    cambiarPaso(n) {
-        carruselState._paso = n;
-        this.updateUI();
-    },
+    irAPaso2() { if (carruselActions.validarPaso1()) this.cambiarPaso(2); },
 
-    irAPaso2() {
-        if (carruselActions.validarPaso1()) {
-            this.cambiarPaso(2);
-        }
-    },
+    cambiarTipo(tipo) { if (carruselState.setTipo(tipo)) this.updateUI(); },
 
-    // --- ACCIONES DE CONFIGURACIÓN ---
+    buscarEnCatalogo(termino) { carruselActions.buscarRelacionados(termino); },
 
-    cambiarTipo(tipo) {
-        const cambio = carruselState.setTipo(tipo);
-        if (cambio) {
-            this.updateUI();
-        }
-    },
+    previsualizarMediaLocal(input) { carruselActions.previsualizarMediaLocal(input); },
 
-    // --- ACCIONES DE BUSQUEDA (NUEVO) ---
+    pedirUrlImagen() { carruselActions.pedirUrlImagen(); },
 
-    /**
-     * Conecta el input del template con la lógica de búsqueda de Actions
-     */
-    buscarEnCatalogo(termino) {
-        carruselActions.buscarRelacionados(termino);
-    },
-
-    // --- ACCIONES DE ITEMS ---
-
-    previsualizarMediaLocal(input) {
-        carruselActions.previsualizarMediaLocal(input);
-    },
-
-    pedirUrlImagen() {
-        carruselActions.pedirUrlImagen();
-    },
-    
     cerrarYRefrescar() {
-        // 1. Quitar el formulario y restaurar el contenedor de la tabla
         if (this._container && this._originalContent) {
             this._container.innerHTML = this._originalContent;
         }
+        // ✅ Limpiar referencias
+        this._container = null;
+        this._originalContent = null;
 
-        // 2. Ejecutar el refresco de datos
+        // ✅ Limpiar selección ANTES de re-renderizar
         if (window.carruselController_View) {
-            window.carruselController_View.render();
+            window.carruselController_View._estado.seleccionados = [];
         }
 
-        // 3. Hacer scroll hacia arriba para que el usuario vea la tabla
+        if (window.carruselController_View) window.carruselController_View.render();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     },
-
     agregarItemALista() {
-        // 1. Capturamos el ítem usando la lógica de carruselActions
         const itemCapturado = carruselActions.capturarItem();
-
-        // Verificación de seguridad para evitar que el proceso se rompa
-        if (!itemCapturado) {
-            console.error("Error: No se pudo capturar la información del ítem.");
-            return;
-        }
+        if (!itemCapturado) return;
 
         const state = window.carruselState;
 
-        // 2. Guardar en el State (Memoria temporal)
         if (state._editingItemIdx !== null && state._editingItemIdx !== undefined) {
             state.items[state._editingItemIdx] = itemCapturado;
-            state._editingItemIdx = null; // Resetear el modo edición
+            state._editingItemIdx = null;
         } else {
             state.items.push(itemCapturado);
         }
 
-        // 3. REFRESCAR LA INTERFAZ (Lista de ítems)
         const container = document.getElementById('items_list_container');
-        if (container && typeof carruselTemplates.renderItemsList === 'function') {
-            container.innerHTML = carruselTemplates.renderItemsList(state.items);
-        }
+        if (container) container.innerHTML = carruselTemplates.renderItemsList(state.items);
 
-        // 4. Actualizar la Previsualización (Live Preview)
         const previewContainer = document.getElementById('live_preview_container');
-        if (previewContainer && typeof carruselTemplates.renderLivePreview === 'function') {
-            previewContainer.innerHTML = carruselTemplates.renderLivePreview(state.items, 0, state.config.tipo);
-        }
+        if (previewContainer) previewContainer.innerHTML = carruselTemplates.renderLivePreview(state.items, 0, state.config.tipo);
 
-        // 5. LIMPIAR EL FORMULARIO (Solución al error TypeError)
-        // En lugar de llamar a una función externa que falla, ejecutamos la limpieza aquí
         this.limpiarFormularioItem();
 
-        // Feedback visual para el usuario
-        const toast = Swal.mixin({
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 2000
-        });
-        toast.fire({
-            icon: 'success',
-            title: 'Cambios aplicados en la lista'
-        });
+        Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 })
+            .fire({ icon: 'success', title: 'Ítem añadido' });
     },
 
-    /**
-     * Este es el método que faltaba y causaba el error en consola.
-     * Limpia el formulario y lo devuelve a su estado original.
-     */
     limpiarFormularioItem() {
         const state = window.carruselState;
         const formContainer = document.getElementById('form_item_container');
-
-        if (formContainer && typeof carruselTemplates.renderFormItem === 'function') {
-            // Re-renderizamos el formulario en modo "nuevo" (null)
-            formContainer.innerHTML = carruselTemplates.renderFormItem(state.config.tipo, null);
-        }
-
-        // Aseguramos que el buscador esté vacío
+        if (formContainer) formContainer.innerHTML = carruselTemplates.renderFormItem(state.config.tipo, null);
         const searchInput = document.getElementById('it_search');
         if (searchInput) searchInput.value = '';
     },
+
+    /**
+     * ✅ FIX: cargarItemParaEditar respeta títulos vacíos
+     * Antes: valorTitulo = item.titulo_manual || item.titulo || 'Sin título'
+     * Ahora: valorTitulo = item.titulo_manual ?? item.titulo ?? ''
+     */
     cargarItemParaEditar(idx) {
-        // 1. Acceso seguro al array de ítems (manejando estructura anidada o directa)
         const itemsArray = Array.isArray(carruselState.items)
             ? carruselState.items
             : (carruselState.items.items || []);
 
         const item = itemsArray[idx];
+        if (!item) { console.error("No se encontró el ítem en índice:", idx); return; }
 
-        if (!item) {
-            console.error("No se encontró el ítem para editar en el índice:", idx);
-            return;
-        }
-
-        // Guardamos el índice en el estado global para saber qué fila sobreescribir al guardar
         carruselState._editingItemIdx = idx;
 
-        // 2. Priorización de Media: Icono > Imagen Manual > Preview
-        // Esto asegura que si hay un icono guardado, se cargue eso en el selector
         const valorMedia = item.icono_manual || item.imagen_url_manual || item.imagen_preview || '';
-        const valorTitulo = item.titulo_manual || item.titulo || 'Sin título';
-        const valorSubtitulo = item.subtitulo_manual || item.subtitulo || '';
+        // ✅ ?? en lugar de || para respetar cadena vacía
+        const valorTitulo = item.titulo_manual ?? item.titulo ?? '';
+        const valorSubtitulo = item.subtitulo_manual ?? item.subtitulo ?? '';
         const valorLink = item.link_destino_manual || item.link || '';
 
-        // 3. Preparamos el objeto "mapeado" para que el Template renderice correctamente
         const itemMapeado = {
             ...item,
             titulo: valorTitulo,
             subtitulo: valorSubtitulo,
             link: valorLink,
-            imagen_preview: valorMedia // Usado por el template para dibujar el <img> o el <i>
+            imagen_preview: valorMedia
         };
 
         const formContainer = document.getElementById('form_item_container');
         if (formContainer) {
-            // Renderizamos el formulario (esto limpia el estado visual previo del form)
             formContainer.innerHTML = carruselTemplates.renderFormItem(carruselState.config.tipo, itemMapeado);
 
-            // 4. Llenamos los inputs físicos. 
-            // Es CRUCIAL que it_media_url tenga el valor para que capturarItem() lo detecte
             const elMedia = document.getElementById('it_media_url');
             const elTitulo = document.getElementById('it_titulo');
             const elSubtitulo = document.getElementById('it_subtitulo');
             const elLink = document.getElementById('it_link');
             const elRelacion = document.getElementById('it_relacion_id');
+            const elSearch = document.getElementById('it_search');
 
             if (elMedia) elMedia.value = valorMedia;
-            if (elTitulo) elTitulo.value = valorTitulo;
-            if (elSubtitulo) elSubtitulo.value = valorSubtitulo;
+            if (elTitulo) elTitulo.value = valorTitulo;    // '' si estaba vacío
+            if (elSubtitulo) elSubtitulo.value = valorSubtitulo; // '' si estaba vacío
             if (elLink) elLink.value = valorLink;
-
-            // Preservamos el ID de relación (producto_id o categoria_id)
             if (elRelacion) elRelacion.value = item.relacion_id || item.producto_id || item.categoria_id || '';
+            if (elSearch) elSearch.value = valorTitulo;    // '' si estaba vacío
 
-            // Si existe buscador (tipo productos/categorías), sincronizamos el texto de búsqueda
-            const elSearch = document.getElementById('it_search');
-            if (elSearch) elSearch.value = valorTitulo;
-
-            // 5. Sincronización visual del Preview
-            // Esto ejecuta la lógica de "Si empieza con fa- pon un icono, si no una imagen"
             if (typeof carruselActions._actualizarPreviewLocal === 'function') {
                 carruselActions._actualizarPreviewLocal(valorMedia);
             }
         }
     },
 
-    cancelarEdicionItem() {
-        carruselState._editingItemIdx = null;
-        this.updateUI();
-    },
+    cancelarEdicionItem() { carruselState._editingItemIdx = null; this.updateUI(); },
 
-    quitarItem(idx) {
-        carruselState.items.splice(idx, 1);
-        this.updateUI();
-    },
+    quitarItem(idx) { carruselState.items.splice(idx, 1); this.updateUI(); },
 
-    reordenar(idx, direccion) {
-        if (carruselState.reordenarItems(idx, direccion)) {
-            this.updateUI();
-        }
-    },
+    reordenar(idx, direccion) { if (carruselState.reordenarItems(idx, direccion)) this.updateUI(); },
 
     cambiarSlide(dir) {
         const total = carruselState.items.length;
         if (total === 0) return;
-
         carruselState._slideActivo = (carruselState._slideActivo + dir + total) % total;
-
         const previewContainer = document.getElementById('live_preview_container');
         if (previewContainer) {
             previewContainer.innerHTML = carruselTemplates.renderLivePreview(
-                carruselState.items,
-                carruselState._slideActivo,
-                carruselState.config.tipo
+                carruselState.items, carruselState._slideActivo, carruselState.config.tipo
             );
         }
     },
 
     async actualizarOrdenAutomatico(nuevoSlug) {
         carruselState.config.ubicacion_slug = nuevoSlug;
-        // Asumimos que carruselController está disponible globalmente
         const proximoOrden = await window.carruselController.obtenerSiguienteOrden(nuevoSlug);
-
         carruselState.config.orden_seccion = proximoOrden;
         const inputOrden = document.getElementById('cfg_orden_seccion');
         if (inputOrden) inputOrden.value = proximoOrden;
     },
 
-    // --- CIERRE Y GUARDADO ---
-
-    finalizarGuardado() {
-        carruselActions.enviarAlServidor();
-    },
+    finalizarGuardado() { carruselActions.enviarAlServidor(); },
 
     cancelarEdicion() {
         if (carruselState.items.length > 0) {
             Swal.fire({
-                title: '¿Salir del editor?',
-                text: "Se perderán los cambios que no hayas guardado.",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#0f172a',
-                confirmButtonText: 'Sí, salir',
-                cancelButtonText: 'Seguir aquí'
-            }).then((result) => {
-                if (result.isConfirmed) this.cerrarYRefrescar();
-            });
+                title: '¿Salir del editor?', text: "Se perderán los cambios sin guardar.",
+                icon: 'warning', showCancelButton: true,
+                confirmButtonColor: '#0f172a', confirmButtonText: 'Sí, salir', cancelButtonText: 'Seguir aquí'
+            }).then(result => { if (result.isConfirmed) this.cerrarYRefrescar(); });
         } else {
             this.cerrarYRefrescar();
         }
-    },
-
-    cerrarYRefrescar() {
-        this._container.innerHTML = this._originalContent;
-        if (window.CarruselList) window.CarruselList.init();
     }
 };
 
-// --- IMPORTANTE: Exposición global inmediata ---
 window.RegisterCarrusel = RegisterCarrusel;

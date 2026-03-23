@@ -2,49 +2,65 @@ import { categoriasModel } from '../models/categoriasModel.js';
 import { categoriasView } from '../views/categoriasView.js';
 
 export const categoriasController = {
-    // Definimos las columnas fijas para la vista
-    COLUMNAS_PADRES: ['nombre'],
-    COLUMNAS_HIJOS: ['nombre', 'categoria_padre'],
+    // Definimos las columnas que el código necesita pero el usuario no debe configurar
+    COLUMNAS_TECNICAS: ['id', 'visible'],
+
+    COLUMNAS_PADRES: ['id', 'nombre', 'visible'],
+    COLUMNAS_HIJOS: ['id', 'nombre', 'categoria_padre', 'visible'],
+    REF_PADRES: 'categorias_padre',
+    REF_HIJOS: 'subcategorias',
 
     _datosPadres: [],
     _datosHijos: [],
+    _colsPadres: [],
+    _colsHijos: [],
 
     async inicializar(pestanaPorDefecto = 'categorias') {
         try {
+            categoriasView._estado.seleccionados = [];
+            categoriasView._actualizarBarraFlotante?.();
             categoriasView.mostrarCargando('Cargando catálogo...');
 
-            // 1. Cargar datos directamente desde el modelo
+            // 1. Obtenemos los datos desde Supabase
             const todas = await categoriasModel.obtenerTodas();
+
+            // 2. CONFIGURACIÓN DE COLUMNAS: 
+            // Usamos las constantes que ya definiste al inicio de tu controlador
+            this._colsPadres = this.COLUMNAS_PADRES;
+            this._colsHijos = this.COLUMNAS_HIJOS;
+
+            // 3. SEPARACIÓN DE DATOS
+            // Filtramos para saber quiénes son padres y quiénes hijos
             this._datosPadres = todas.filter(c => !c.id_padre);
             this._datosHijos = todas.filter(c => c.id_padre);
 
-            // 2. Sincronizar la pestaña en el estado de la vista
+            // 4. Actualizamos el estado de la pestaña
             categoriasView._estado.pestanaActiva = pestanaPorDefecto;
 
-            // 3. Renderizar
+            // 5. Pintamos la vista con la configuración y los datos
             this.refrescarVista();
 
-            Swal.close();
+            if (window.Swal) Swal.close();
         } catch (error) {
-            console.error("Error al inicializar:", error);
+            console.error("Error al inicializar controlador:", error);
             categoriasView.notificarError('No se pudieron cargar los datos.');
         }
     },
-
     /**
      * REFRESCO DE VISTA
      */
     refrescarVista() {
-        // Pasamos los datos y las columnas estáticas definidas arriba
+        // Pasamos los datos completos; la vista hará el .slice() de la paginación internamente
         categoriasView.render(
-            this._datosPadres, 
-            this.COLUMNAS_PADRES, 
-            this._datosHijos, 
-            this.COLUMNAS_HIJOS
+            this._datosPadres,
+            this._colsPadres,
+            this._datosHijos,
+            this._colsHijos
         );
-        
+
+        // Mantenemos tus configuraciones de eventos
         this._setupEventListeners();
-        this._setupTabLogic(); 
+        this._setupTabLogic();
     },
 
     async verDetalle(id) {
@@ -58,13 +74,17 @@ export const categoriasController = {
         const res = await categoriasModel.eliminar(id);
         if (res.exito) {
             categoriasView.notificarExito('Registro eliminado correctamente');
-            this.inicializar(categoriasView._estado.pestanaActiva); 
+            // Recargamos manteniendo la pestaña actual del estado de la vista
+            this.inicializar(categoriasView._estado.pestanaActiva);
         } else {
             categoriasView.notificarError(res.mensaje);
         }
     },
 
     async mostrarFormularioCreacion(tipo) {
+        categoriasView._estado.seleccionados = [];
+        categoriasView.limpiarSeleccion?.();
+
         categoriasView._estado.pestanaActiva = (tipo === 'padre') ? 'categorias' : 'subcategorias';
 
         const datos = await categoriasView.mostrarFormulario({
@@ -75,15 +95,22 @@ export const categoriasController = {
         if (datos) {
             const res = await categoriasModel.crear(datos);
             if (res.exito) {
-                this.inicializar(categoriasView._estado.pestanaActiva);
                 categoriasView.notificarExito('Registro creado con éxito');
+                await this._recargarSilencioso();
             } else {
                 categoriasView.notificarError('No se pudo crear el registro');
             }
+        } else {
+            // ✅ Usuario canceló — limpiar checkbox header igual
+            categoriasView._actualizarCheckboxHeader?.();
+            categoriasView._actualizarBarraFlotante?.();
         }
     },
 
     async editar(id) {
+        categoriasView._estado.seleccionados = [];
+        categoriasView.limpiarSeleccion?.();
+
         const registro = await categoriasModel.obtenerPorId(id);
         const padresDisponibles = this._datosPadres.filter(c => c.id !== id);
 
@@ -93,21 +120,44 @@ export const categoriasController = {
             titulo: 'Editar Registro',
             nombre: registro.nombre,
             id_padre: registro.id_padre,
-            categoriasPadre: padresDisponibles 
+            categoriasPadre: padresDisponibles
         });
 
         if (nuevosDatos) {
             const res = await categoriasModel.actualizar(id, nuevosDatos);
             if (res.exito) {
-                this.inicializar(categoriasView._estado.pestanaActiva);
                 categoriasView.notificarExito('Cambios guardados correctamente');
+                await this._recargarSilencioso();
             } else {
                 categoriasView.notificarError('Error al actualizar');
             }
+        } else {
+            // ✅ Usuario canceló — limpiar checkbox header igual
+            categoriasView._actualizarCheckboxHeader?.();
+            categoriasView._actualizarBarraFlotante?.();
         }
     },
 
-    // --- LÓGICA DE INTERFAZ Y EVENTOS ---
+    async _recargarSilencioso() {
+        try {
+            // ✅ Limpiar selección antes de recargar
+            categoriasView._estado.seleccionados = [];
+
+            const [colsPadres, colsHijos, todas] = await Promise.all([
+                categoriasModel.obtenerTodas()
+            ]);
+
+            this._colsPadres = colsPadres;
+            this._colsHijos = colsHijos;
+            this._datosPadres = todas.filter(c => !c.id_padre);
+            this._datosHijos = todas.filter(c => c.id_padre);
+
+            this.refrescarVista();
+        } catch (error) {
+            console.error('Error al recargar:', error);
+        }
+    },
+    // --- LÓGICA DE INTERFAZ Y EVENTOS (Mantenida intacta) ---
 
     activarPestanaSubcategorias() {
         const btnSub = document.getElementById('tab-subcategorias');
@@ -125,7 +175,7 @@ export const categoriasController = {
         const btnSub = document.getElementById('tab-subcategorias');
         const secCat = document.getElementById('seccion-categorias');
         const secSub = document.getElementById('seccion-subcategorias');
-        
+
         if (!btnCat || !btnSub) return;
 
         btnCat.onclick = () => {
@@ -148,12 +198,24 @@ export const categoriasController = {
     },
 
     _setupEventListeners() {
+        const configCat = document.getElementById('btn-config-cat');
         const nuevaCat = document.getElementById('btn-nueva-cat');
+        const configSub = document.getElementById('btn-config-sub');
         const nuevaSub = document.getElementById('btn-nueva-sub');
 
         if (nuevaCat) nuevaCat.onclick = () => this.mostrarFormularioCreacion('padre');
         if (nuevaSub) nuevaSub.onclick = () => this.mostrarFormularioCreacion('hijo');
-    }
+    },
+
+    async eliminarLote(ids) {
+        try {
+            await Promise.all(ids.map(id => categoriasModel.eliminar(id)));
+            return { exito: true };
+        } catch (err) {
+            console.error('Error en eliminarLote:', err.message);
+            return { exito: false, mensaje: err.message };
+        }
+    },
 };
 
 window.categoriasController = categoriasController;

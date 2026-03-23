@@ -18,18 +18,56 @@ export const categoriasModel = {
                         nombre
                     )
                 `)
-                .eq('visible', true) // Filtro para ignorar registros "eliminados"
+                .eq('visible', true)
                 .order('nombre', { ascending: true });
 
             if (error) throw error;
 
             return data.map(item => ({
                 ...item,
+                // ✅ FIX: Normalizar id_padre a número o null explícitamente
+                // Supabase a veces devuelve strings o valores inesperados
+                id_padre: item.id_padre ? parseInt(item.id_padre) : null,
                 nombre_padre: item.categoria_padre ? item.categoria_padre.nombre : 'Principal'
             }));
 
         } catch (err) {
             console.error('Error en categoriasModel.obtenerTodas:', err.message);
+            return [];
+        }
+    },
+
+    /**
+     * ✅ NUEVO: Obtiene SOLO las categorías hijas (las que tienen id_padre).
+     * Usado por productManager para el selector de categorías.
+     */
+    async obtenerHijas() {
+        try {
+            const { data, error } = await supabase
+                .from('categoria')
+                .select(`
+                    id,
+                    nombre,
+                    visible,
+                    id_padre,
+                    categoria_padre:id_padre (
+                        nombre
+                    )
+                `)
+                .eq('visible', true)
+                .not('id_padre', 'is', null) // ✅ Solo hijas: las que SÍ tienen padre
+                .order('nombre', { ascending: true });
+
+            if (error) throw error;
+
+            return data.map(item => ({
+                ...item,
+                id_padre: parseInt(item.id_padre),
+                nombre_padre: item.categoria_padre ? item.categoria_padre.nombre : ''
+            }));
+
+        } catch (err) {
+            console.error('Error en categoriasModel.obtenerHijas:', err.message);
             return [];
         }
     },
@@ -52,6 +90,7 @@ export const categoriasModel = {
 
             return {
                 ...data,
+                id_padre: data.id_padre ? parseInt(data.id_padre) : null,
                 nombre_padre: data.categoria_padre ? data.categoria_padre.nombre : 'Ninguna (Es Principal)'
             };
         } catch (err) {
@@ -89,7 +128,6 @@ export const categoriasModel = {
      */
     async actualizar(id, cambios) {
         try {
-            // Aseguramos que id_padre se maneje correctamente si viene vacío
             if (cambios.hasOwnProperty('id_padre')) {
                 cambios.id_padre = cambios.id_padre || null;
             }
@@ -109,8 +147,7 @@ export const categoriasModel = {
     },
 
     /**
-     * Realiza un Soft Delete (Cambia visible a false).
-     * Mantenemos el nombre de la función como 'eliminar' para consistencia con el Controller.
+     * Soft Delete (Cambia visible a false).
      */
     async eliminar(id) {
         try {
@@ -130,6 +167,7 @@ export const categoriasModel = {
             };
         }
     },
+
     /**
      * Busca categorías activas por nombre
      */
@@ -137,7 +175,7 @@ export const categoriasModel = {
         try {
             const { data, error } = await supabase
                 .from('categoria')
-                .select('id, nombre') // Solo las columnas que existen
+                .select('id, nombre')
                 .ilike('nombre', `%${termino}%`)
                 .eq('visible', true)
                 .limit(10);
@@ -147,7 +185,6 @@ export const categoriasModel = {
             return data.map(c => ({
                 id: c.id,
                 nombre: c.nombre,
-                // Como tu tabla no tiene imagen, enviamos un placeholder
                 imagen: 'https://placehold.co/400x400?text=Categoria'
             }));
         } catch (err) {

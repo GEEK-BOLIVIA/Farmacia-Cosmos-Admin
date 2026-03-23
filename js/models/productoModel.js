@@ -1,14 +1,7 @@
 import { supabase } from '../config/supabaseClient.js';
 
-/**
- * Producto Model - Nexus Admin Suite
- * Versión corregida para Mapeo de Switches y Soporte de Multimedia
- */
 export const productoModel = {
 
-    /**
-     * Obtiene productos usando la VISTA especializada.
-     */
     async listarActivos() {
         try {
             const { data, error } = await supabase
@@ -19,25 +12,35 @@ export const productoModel = {
 
             if (error) throw error;
 
-            const productosUnicos = [];
-            const idsProcesados = new Set();
+            const mapaProductos = new Map();
 
             data.forEach(p => {
-                if (!idsProcesados.has(p.producto_id)) {
-                    idsProcesados.add(p.producto_id);
-
-                    productosUnicos.push({
+                if (!mapaProductos.has(p.producto_id)) {
+                    mapaProductos.set(p.producto_id, {
                         ...p,
                         id: p.producto_id,
                         nombre: p.producto_nombre,
                         nombre_categoria: p.categoria_padre_nombre
                             ? `${p.categoria_padre_nombre} > ${p.categoria_nombre}`
-                            : (p.categoria_nombre || 'Sin Categoría')
+                            : (p.categoria_nombre || 'Sin Categoría'),
+                        // ✅ Arrays para acumular TODAS las categorías del producto
+                        _todas_categorias: [],
+                        _todos_padres: []
                     });
+                }
+
+                const prod = mapaProductos.get(p.producto_id);
+
+                if (p.categoria_nombre && !prod._todas_categorias.includes(p.categoria_nombre)) {
+                    prod._todas_categorias.push(p.categoria_nombre);
+                }
+                if (p.categoria_padre_nombre && !prod._todos_padres.includes(p.categoria_padre_nombre)) {
+                    prod._todos_padres.push(p.categoria_padre_nombre);
                 }
             });
 
-            return productosUnicos;
+            return Array.from(mapaProductos.values());
+
         } catch (err) {
             console.error('Error en productoModel.listarActivos:', err.message);
             return [];

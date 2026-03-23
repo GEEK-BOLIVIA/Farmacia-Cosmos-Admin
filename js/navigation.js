@@ -1,8 +1,13 @@
 import { categoriasController } from './controllers/categoriasController.js';
 import { productoController } from './controllers/productoController.js';
 import { importacionController } from './controllers/importacionController.js';
+// Agregamos la importación del modelo de usuario
 import { usuarioModel } from './models/usuarioModel.js';
 
+/**
+ * Navigation Controller - Nexus Admin Suite
+ * Integra carga de IFRAMEs, AJAX, MVC, UI de Sidebar y PROTECCIÓN DE RUTAS
+ */
 document.addEventListener('DOMContentLoaded', async () => {
 
     // --- 0. PROTECCIÓN DE RUTAS Y SESIÓN ---
@@ -17,8 +22,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     const sesionActiva = await verificarAcceso();
-    if (!sesionActiva) return; // Detiene la ejecución si no está autorizado
+    if (!sesionActiva) return;
+    // ✅ CONTROL DEL BOTÓN ATRÁS DEL NAVEGADOR
+    // Reemplaza la entrada actual del historial con administracion.html
+    // para que el "atrás" no lleve a index.html
+    history.replaceState({ page: 'admin' }, '', window.location.href);
 
+    // Cada vez que el usuario navega dentro del panel, agregamos una entrada
+    // "ficticia" al historial para absorber el botón atrás
+    history.pushState({ page: 'admin' }, '', window.location.href);
+
+    window.addEventListener('popstate', (e) => {
+        history.pushState({ page: 'admin' }, '', window.location.href);
+
+        // ✅ Verificar productManager activo — _resolve pendiente indica formulario abierto
+        const productManagerActivo = window.productManager?._resolve !== null &&
+            window.productManager?._mainContainer !== null &&
+            document.querySelector('[onclick*="productManager.cancelarEdicion"]') !== null;
+
+        if (productManagerActivo) {
+            window.productManager.cancelarEdicion();
+            return;
+        }
+
+        // ✅ Verificar RegisterCarrusel activo en el DOM
+        const carruselActivo = window.RegisterCarrusel?._container &&
+            document.body.contains(window.RegisterCarrusel._container) &&
+            window.RegisterCarrusel._container.id === 'content-area';
+
+        if (carruselActivo) {
+            window.RegisterCarrusel.cancelarEdicion();
+            return;
+        }
+
+        // ✅ Si hay un Swal abierto, cerrarlo
+        if (Swal.isVisible()) {
+            Swal.close();
+            return;
+        }
+    });
     // --- 0.1 CARGAR DATOS DEL USUARIO EN LA UI ---
     // --- CARGAR DATOS DEL USUARIO EN LA UI ---
     const perfil = sesionActiva.perfil;
@@ -36,12 +78,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- 0.2 INICIALIZACIÓN AUTOMÁTICA DE PRODUCTOS ---
     try {
-        // Cargamos la vista de productos por defecto al entrar
         await productoController.inicializar();
+        // ✅ Buscar el summary padre del div con onclick de productos
+        const divProductos = document.querySelector('#main-sidebar details summary div[onclick*="productoController.inicializar"]');
+        const summaryProductos = divProductos?.closest('summary');
+        if (summaryProductos) actualizarEstadoActivo(summaryProductos);
     } catch (error) {
         console.error("Error al cargar productos iniciales:", error);
     }
-
     // --- 0.3 LÓGICA DE LOGOUT ---
     const btnLogout = document.querySelector('button[title="Cerrar Sesión"]');
     if (btnLogout) {
@@ -106,14 +150,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     inyectarEstilosGlobales();
 
-    // --- LÓGICA DE UI: SIDEBAR (Centrado de logo completo) ---
+    // --- LÓGICA DE UI: SIDEBAR (Corregida para alineación) ---
     window.sidebarController = {
         toggle() {
             const sidebar = document.getElementById('main-sidebar');
             const icon = document.getElementById('sidebar-icon');
             const logoImg = document.getElementById('sidebar-logo');
-            const logoContainer = logoImg?.parentElement; // El div superior h-12
 
+            // Intentamos capturar los contenedores de perfil y logout para alinearlos
             const profileWrapper = sidebar.querySelector('.flex.items-center.bg-white.rounded-xl') || sidebar.querySelector('aside .p-4 div:has(img)');
             const logoutBtn = document.querySelector('button[title="Cerrar Sesión"]');
 
@@ -121,43 +165,31 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (isColapsed) {
                 sidebar.classList.remove('w-[280px]');
-                sidebar.classList.add('sidebar-colapsado');
+                sidebar.classList.add('sidebar-colapsado'); // Clase de control para CSS
                 icon.innerText = 'chevron_right';
 
                 if (logoImg) {
-                    logoImg.src = 'images/logo-cosmos-icon.png';
-                    logoImg.classList.replace('h-10', 'h-16');
-
-                    if (logoContainer) {
-                        // Mantenemos el centrado cuando está colapsado
-                        logoContainer.classList.replace('h-12', 'h-20');
-                        logoContainer.classList.replace('justify-start', 'justify-center');
-                    }
+                    logoImg.src = 'images/favicon.png';
+                    logoImg.classList.add('h-8');
                 }
 
                 if (profileWrapper) profileWrapper.classList.add('profile-wrapper');
                 if (logoutBtn) logoutBtn.classList.add('logout-btn');
-                document.querySelectorAll('.sidebar-hide').forEach(el => el.classList.add('hidden'));
 
+                document.querySelectorAll('.sidebar-hide').forEach(el => el.classList.add('hidden'));
             } else {
                 sidebar.classList.add('w-[280px]');
                 sidebar.classList.remove('sidebar-colapsado');
                 icon.innerText = 'chevron_left';
 
                 if (logoImg) {
-                    logoImg.src = 'images/logo-cosmos.png';
-                    // Respetamos tu tamaño h-10 para el logo con letras
-                    logoImg.classList.replace('h-16', 'h-10');
-
-                    if (logoContainer) {
-                        // CLAVE: Restauramos h-12 pero cambiamos a justify-center
-                        logoContainer.classList.replace('h-20', 'h-12');
-                        logoContainer.classList.replace('justify-start', 'justify-center'); // CENTRADO CUANDO ESTÁ ABIERTO
-                    }
+                    logoImg.src = 'images/logo.png';
+                    logoImg.classList.remove('h-8');
                 }
 
                 if (profileWrapper) profileWrapper.classList.remove('profile-wrapper');
                 if (logoutBtn) logoutBtn.classList.remove('logout-btn');
+
                 document.querySelectorAll('.sidebar-hide').forEach(el => el.classList.remove('hidden'));
             }
         }
@@ -242,8 +274,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     function actualizarEstadoActivo(elementoActivo) {
         if (!elementoActivo) return;
 
-        const todosLosLinks = document.querySelectorAll('.nav-item, [id^="link-"], details button, summary');
-        todosLosLinks.forEach(i => {
+        // ✅ Limpiar todos los elementos navegables del sidebar
+        const selectores = [
+            '.nav-item',
+            '[id^="link-"]',
+            'details button',
+            'summary',
+            '#main-sidebar details > summary > div'
+        ];
+
+        document.querySelectorAll(selectores.join(', ')).forEach(i => {
             i.classList.remove(
                 'bg-blue-50', 'text-blue-600',
                 'bg-indigo-50', 'text-indigo-600',
@@ -251,14 +291,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 'bg-emerald-50', 'text-emerald-600',
                 'bg-slate-100'
             );
-            i.classList.add('text-slate-500');
+            // ✅ Solo agregar text-slate-500 a elementos que no sean divs internos de summary
+            if (!i.matches('#main-sidebar details > summary > div')) {
+                i.classList.add('text-slate-500');
+            }
             const p = i.querySelector('p');
             if (p) p.classList.remove('text-blue-600');
         });
 
+        // ✅ También resetear los summaries de categorías al cambiar de sección
+        window.resetearSidebarActivo?.();
+
         elementoActivo.classList.remove('text-slate-500', 'text-slate-400');
         const id = elementoActivo.id || '';
-        const texto = elementoActivo.innerText.toLowerCase();
+        const texto = elementoActivo.innerText?.toLowerCase() || '';
 
         if (id === 'link-config-cliente') {
             elementoActivo.classList.add('bg-indigo-50', 'text-indigo-600');
@@ -270,4 +316,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             elementoActivo.classList.add('bg-blue-50', 'text-blue-600');
         }
     }
+    // ✅ Función global para resetear estilos activos del sidebar de categorías
+    window.resetearSidebarActivo = function () {
+        const summaryCatClase = 'flex items-center justify-between rounded-lg px-3 py-2.5 transition-all cursor-pointer list-none text-slate-500 hover:bg-blue-50 hover:text-blue-600';
+        const claseInactivoDiv = 'flex items-center gap-3 flex-1';
+
+        ['sidebar-details-categorias', 'sidebar-details-subcategorias'].forEach(id => {
+            const details = document.getElementById(id);
+            if (!details) return;
+            details.removeAttribute('open');
+            const summary = details.querySelector('summary');
+            const div = summary?.querySelector('div');
+            if (summary) summary.className = summaryCatClase;
+            if (div) div.className = claseInactivoDiv;
+        });
+    };
 });
