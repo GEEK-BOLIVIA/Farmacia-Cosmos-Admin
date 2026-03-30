@@ -143,12 +143,13 @@ export const categoriasController = {
             // ✅ Limpiar selección antes de recargar
             categoriasView._estado.seleccionados = [];
 
-            const [colsPadres, colsHijos, todas] = await Promise.all([
-                categoriasModel.obtenerTodas()
-            ]);
+            // ✅ Sin Promise.all innecesario — solo una consulta
+            const todas = await categoriasModel.obtenerTodas();
 
-            this._colsPadres = colsPadres;
-            this._colsHijos = colsHijos;
+            // ✅ Columnas fijas sin configuracionColumnas
+            this._colsPadres = this.COLUMNAS_PADRES;
+            this._colsHijos = this.COLUMNAS_HIJOS;
+
             this._datosPadres = todas.filter(c => !c.id_padre);
             this._datosHijos = todas.filter(c => c.id_padre);
 
