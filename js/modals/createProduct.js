@@ -552,15 +552,32 @@ export const productManager = {
         if (!this._portadaArchivo.url) return;
         Swal.fire({
             html: `
-            <img src="${this._portadaArchivo.url}" class="w-full rounded-2xl object-contain" style="max-height:80vh;">
-            <div class="mt-4 flex justify-center">
-                <button onclick="window.productManager.cambiarPortada('local'); Swal.close();"
-                        class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2">
-                    <span class="material-symbols-outlined text-sm">upload_file</span> Cambiar portada
-                </button>
-            </div>`,
-            showConfirmButton: false, background: 'transparent',
-            width: '860px', backdrop: 'rgba(15,23,42,0.96)', showCloseButton: true
+        <img src="${this._portadaArchivo.url}" class="w-full rounded-2xl object-contain" style="max-height:80vh;">
+        <div class="mt-4 flex justify-center">
+            <label class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase transition-all flex items-center gap-2 cursor-pointer">
+                <span class="material-symbols-outlined text-sm">upload_file</span> Cambiar portada
+                <input type="file" accept="image/*" class="hidden" id="input-cambiar-portada-ampliada">
+            </label>
+        </div>`,
+            showConfirmButton: false,
+            background: 'transparent',
+            width: '860px',
+            backdrop: 'rgba(15,23,42,0.96)',
+            showCloseButton: true,
+            didOpen: () => {
+                document.getElementById('input-cambiar-portada-ampliada')?.addEventListener('change', (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    // ✅ Actualizar portada directamente sin otro Swal
+                    this._portadaArchivo = {
+                        tipo: 'imagen',
+                        data: file,
+                        url: URL.createObjectURL(file)
+                    };
+                    Swal.close();
+                    this.updateUI();
+                });
+            }
         });
     },
 

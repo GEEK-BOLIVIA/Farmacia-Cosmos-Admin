@@ -172,8 +172,8 @@ export const categoriasView = {
     _reenlazarBotones() {
         const btnNuevaCat = document.getElementById('btn-nueva-cat');
         const btnNuevaSub = document.getElementById('btn-nueva-sub');
-        if (btnNuevaCat) btnNuevaCat.onclick = () => categoriasController.mostrarFormularioCreacion('padre');
-        if (btnNuevaSub) btnNuevaSub.onclick = () => categoriasController.mostrarFormularioCreacion('hijo');
+        if (btnNuevaCat) btnNuevaCat.onclick = () => window.categoriasController.mostrarFormularioCreacion('padre');
+        if (btnNuevaSub) btnNuevaSub.onclick = () => window.categoriasController.mostrarFormularioCreacion('hijo');
     },
 
     // ==========================================
@@ -567,7 +567,7 @@ export const categoriasView = {
                 `).join('')}
                 <td class="px-6 py-4">
                     <div class="flex items-center justify-center gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                        <button onclick="categoriasController.editar('${item.id}')" title="Editar" class="w-10 h-10 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+                        <button onclick="window.categoriasController.editar('${item.id}')" title="Editar" class="w-10 h-10 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"><span class="material-symbols-outlined text-[18px]">edit</span></button>
                         <button onclick="categoriasView.verDetalle('${item.id}')" title="Ver Detalle" class="w-10 h-10 flex items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
                         <button onclick="categoriasView.confirmarEliminacion('${dataString}')" title="Eliminar" class="w-10 h-10 flex items-center justify-center rounded-xl bg-red-50 text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all shadow-sm"><span class="material-symbols-outlined text-[18px]">delete</span></button>
                     </div>
@@ -586,7 +586,7 @@ export const categoriasView = {
     },
 
     verDetalle(id) {
-        categoriasController.verDetalle(id);
+        window.categoriasController.verDetalle(id);
     },
 
     mostrarDetalle(registro) {
@@ -608,7 +608,7 @@ export const categoriasView = {
         }).then((result) => {
             if (result.isConfirmed) {
                 this.confirmarAccion('¿Está seguro que desea editar este registro?', () => {
-                    categoriasController.editar(registro.id);
+                    window.categoriasController.editar(registro.id);
                 });
             }
         });
@@ -654,7 +654,7 @@ export const categoriasView = {
                     }
                 }).then((finalResult) => {
                     if (finalResult.isConfirmed) {
-                        categoriasController.eliminarRegistro(registro.id);
+                        window.categoriasController.eliminarRegistro(registro.id);
                     }
                 });
             }

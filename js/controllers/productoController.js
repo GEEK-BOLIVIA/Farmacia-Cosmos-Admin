@@ -29,10 +29,20 @@ export const productoController = {
                 try {
                     if (item.file instanceof File) {
                         const url = await this._uploadToSupabase(item.file, 'galeria', nombreProducto);
-                        return { url, tipo: item.file.type.startsWith('video') ? 'video' : 'imagen', orden: ordenFinal, nombre: item.nombre || item.file.name };
+                        return {
+                            url,
+                            tipo: item.file.type.startsWith('video') ? 'video' : 'imagen',
+                            orden: ordenFinal,
+                            nombre: item.nombre || item.file.name // ✅ prioriza nombre guardado en state
+                        };
                     }
                     if (typeof item.url === 'string' && item.url.startsWith('http')) {
-                        return { url: item.url, tipo: item.tipo || 'imagen', orden: ordenFinal, nombre: item.nombre || 'Archivo guardado' };
+                        return {
+                            url: item.url,
+                            tipo: item.tipo || 'imagen',
+                            orden: ordenFinal,
+                            nombre: item.nombre || item.url.split('/').pop()?.split('?')[0] || 'archivo'
+                        };
                     }
                     return null;
                 } catch (err) {
@@ -255,8 +265,6 @@ export const productoController = {
      */
     async mostrarFormularioEditar(id) {
         try {
-            productoView._estado.seleccionados = [];
-            productoView.limpiarSeleccion?.();
             Swal.fire({
                 title: '<span class="text-slate-800 font-black uppercase text-sm">Cargando producto...</span>',
                 allowOutsideClick: false,
@@ -288,43 +296,89 @@ export const productoController = {
                 galeria: galeriaActual || []
             };
 
+            // ✅ Limpiar selección al entrar al formulario
+            productoView._estado.seleccionados = [];
+            productoView.limpiarSeleccion?.();
+
             const datosEditados = await productManager.start('content-area', categoriasHijas, productoParaEdicion);
             if (!datosEditados) return;
 
             this._mostrarProgreso(['Procesando archivos', 'Actualizando datos', 'Sincronizando galería']);
 
-            // PASO 1: Portada + galería en paralelo
+            // ✅ PASO 1: Solo subir portada si es archivo nuevo
             const archivoPortada = datosEditados.portada?.data || datosEditados.portada;
-            const [portadaFinal, nuevaGaleria] = await Promise.all([
-                archivoPortada instanceof File
-                    ? this._uploadToSupabase(archivoPortada, 'portadas', datosEditados.nombre)
-                    : Promise.resolve(typeof datosEditados.portada === 'string' ? datosEditados.portada : producto.imagen_url),
-                this._procesarGaleria(datosEditados.galeria, datosEditados.nombre)
-            ]);
+            const portadaFinal = archivoPortada instanceof File
+                ? await this._uploadToSupabase(archivoPortada, 'portadas', datosEditados.nombre)
+                : (typeof datosEditados.portada === 'string' ? datosEditados.portada : producto.imagen_url);
+
+            // ✅ Separar archivos nuevos de los ya existentes en Supabase
+            const galeriaConArchivosNuevos = datosEditados.galeria.filter(i => i.file instanceof File);
+            const galeriaExistente = datosEditados.galeria.filter(i => !(i.file instanceof File));
+
+            // ✅ Subir solo los nuevos en paralelo
+            const galeriaSubida = await Promise.all(
+                galeriaConArchivosNuevos.map(async item => {
+                    const url = await this._uploadToSupabase(item.file, 'galeria', datosEditados.nombre);
+                    return {
+                        url,
+                        tipo: item.file.type.startsWith('video') ? 'video' : 'imagen',
+                        orden: item.orden,
+                        nombre: item.nombre || item.file.name
+                    };
+                })
+            );
+
+            // ✅ Combinar existentes + nuevos subidos manteniendo orden
+            const galeriaFinal = [
+                ...galeriaExistente.map(i => ({
+                    url: i.url,
+                    tipo: i.tipo || 'imagen',
+                    orden: i.orden,
+                    nombre: i.nombre || i.url?.split('/').pop()?.split('?')[0] || 'archivo' // ✅ extraer nombre de la URL
+                })),
+                ...galeriaSubida
+            ].sort((a, b) => a.orden - b.orden);
+
             this._setStep(1);
 
-            // PASO 2: Actualizar producto
-            const res = await productoModel.actualizar(id, {
-                nombre: datosEditados.nombre.trim(),
-                precio: parseFloat(datosEditados.precio),
-                stock: parseInt(datosEditados.stock),
-                descripcion: datosEditados.descripcion.trim(),
-                ws_active: datosEditados.ws_active,
-                price_visible: datosEditados.price_visible,
-                portada: portadaFinal
+            // ✅ Detectar si la galería realmente cambió
+            const hayArchivosNuevos = galeriaConArchivosNuevos.length > 0;
+            const galeriaOriginalIds = new Set(galeriaActual.map(i => String(i.id)));
+            const galeriaEditadaIds = new Set(datosEditados.galeria.map(i => String(i.id)));
+            const hayEliminados = [...galeriaOriginalIds].some(id => !galeriaEditadaIds.has(id));
+            const hayReorden = galeriaActual.some(item => {
+                const editado = datosEditados.galeria.find(i => String(i.id) === String(item.id));
+                return editado && editado.orden !== item.orden;
             });
+            const galeriaModificada = hayArchivosNuevos || hayEliminados || hayReorden;
+
+            // ✅ PASO 2: Actualizar producto Y categorías en paralelo
+            const [res] = await Promise.all([
+                productoModel.actualizar(id, {
+                    nombre: datosEditados.nombre.trim(),
+                    precio: parseFloat(datosEditados.precio),
+                    stock: parseInt(datosEditados.stock),
+                    descripcion: datosEditados.descripcion.trim(),
+                    ws_active: datosEditados.ws_active,
+                    price_visible: datosEditados.price_visible,
+                    portada: portadaFinal
+                }),
+                productoCategoriaModel.actualizarRelaciones(id, datosEditados.categoriasIds)
+            ]);
+
             if (!res.exito) { this._setStep(2, false); throw new Error(res.mensaje); }
             this._setStep(2);
 
-            // PASO 3: Limpiar + re-vincular en paralelo, luego crear lote galería
-            await Promise.all([
-                productoCategoriaModel.actualizarRelaciones(id, datosEditados.categoriasIds),
-                galeriaProductoModel.limpiarGaleria(id)
-            ]);
-            if (nuevaGaleria.length > 0) await galeriaProductoModel.createLote(id, nuevaGaleria);
+            // ✅ PASO 3: Solo limpiar y reinsertar galería si hubo cambios reales
+            if (galeriaModificada) {
+                await galeriaProductoModel.limpiarGaleria(id);
+                if (galeriaFinal.length > 0) {
+                    await galeriaProductoModel.createLote(id, galeriaFinal);
+                }
+            }
+
             this._setStep(3);
 
-            // ✅ Notificar inmediatamente, refresco en segundo plano
             await new Promise(r => setTimeout(r, 350));
             Swal.close();
             productoView.notificarExito?.('¡Producto actualizado!');

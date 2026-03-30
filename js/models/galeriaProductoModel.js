@@ -88,11 +88,10 @@ export const galeriaProductoModel = {
                     url: cleaned.url,
                     tipo: cleaned.tipo,
                     orden: parseInt(item.orden) || 0,
+                    nombre: item.nombre || cleaned.url.split('/').pop()?.split('?')[0] || 'archivo', // ✅
                     visible: true
                 };
             });
-
-            console.log(`DB: Intentando insertar lote de ${payload.length} elementos para producto ${idProducto}`);
 
             const { data, error } = await supabase
                 .from('galeria_producto')
@@ -100,8 +99,6 @@ export const galeriaProductoModel = {
                 .select();
 
             if (error) throw error;
-
-            console.log("DB: Lote insertado correctamente.");
             return { exito: true, data };
         } catch (error) {
             console.error("Model Error [createLote]:", error.message);
