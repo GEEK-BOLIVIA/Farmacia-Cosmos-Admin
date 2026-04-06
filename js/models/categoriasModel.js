@@ -71,6 +71,27 @@ export const categoriasModel = {
             return [];
         }
     },
+    
+    async obtenerPadres() {
+        try {
+            const { data, error } = await supabase
+                .from('categoria')
+                .select('id, nombre, visible, id_padre')
+                .eq('visible', true)
+                .is('id_padre', null)
+                .order('nombre', { ascending: true });
+
+            if (error) throw error;
+
+            return (data || []).map(item => ({
+                ...item,
+                id_padre: null
+            }));
+        } catch (err) {
+            console.error('Error en categoriasModel.obtenerPadres:', err.message);
+            return [];
+        }
+    },
 
     /**
      * Obtiene una categoría específica por su ID incluyendo datos del padre.

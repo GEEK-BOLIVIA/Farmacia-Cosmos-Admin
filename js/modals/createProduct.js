@@ -1,13 +1,24 @@
+import { categoriasModel } from '../models/categoriasModel.js';
+
 export const productManager = {
     _galeriaArchivos: [],
     _portadaArchivo: { tipo: 'local', data: null, url: '' },
     _pasoActual: 1,
     _categoriasSeleccionadas: [],
-    _datosTemporales: { ws_active: true, price_visible: true, nombre: '', precio: '', stock: 0, descripcion: '' },
+    _datosTemporales: { ws_active: true, price_visible: true, codigo: '', nombre: '', precio: '', stock: 0, descripcion: '' },
     _resolve: null,
     _originalContent: null,
     _mainContainer: null,
-    _searchTerm: '',
+    _padreSeleccionadoId: null,
+    _categoriasPadresList: [],
+
+    _htmlEscape(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    },
 
     // ─────────────────────────────────────────────
     // TOOLTIPS — Tippy.js cargado una sola vez
@@ -218,19 +229,22 @@ export const productManager = {
     // ─────────────────────────────────────────────
     // INICIALIZACIÓN
     // ─────────────────────────────────────────────
-    async start(containerId, categorias, dPrevios = {}) {
+    async start(containerId, categoriasHijas, dPrevios = {}, categoriasPadres = []) {
         this._mainContainer = document.getElementById(containerId);
         if (!this._mainContainer) return;
 
         this._galeriaArchivos = [];
         this._categoriasSeleccionadas = [];
         this._portadaArchivo = { tipo: 'local', data: null, url: '' };
-        this._searchTerm = '';
         this._pasoActual = 1;
+        this._padreSeleccionadoId = null;
         this._originalContent = this._mainContainer.innerHTML;
-        window.categoriasRaw = categorias;
+        window.categoriasRaw = categoriasHijas || [];
+        this._categoriasPadresList = Array.isArray(categoriasPadres) ? categoriasPadres : [];
 
+        const codigoPrev = dPrevios.codigo != null ? String(dPrevios.codigo).replace(/\D/g, '').slice(0, 13) : '';
         this._datosTemporales = {
+            codigo: codigoPrev,
             nombre: dPrevios.nombre || '',
             precio: dPrevios.precio || '',
             stock: dPrevios.stock || 0,
@@ -240,7 +254,21 @@ export const productManager = {
             id: dPrevios.id || null
         };
 
-        this._categoriasSeleccionadas = dPrevios.categoriasIds || [];
+        const prevIds = dPrevios.categoriasIds;
+        const firstId = Array.isArray(prevIds) && prevIds.length ? Number(prevIds[0]) : null;
+        if (firstId != null && !Number.isNaN(firstId)) {
+            const hijas = categoriasHijas || [];
+            const padres = this._categoriasPadresList;
+            const asHija = hijas.find(h => Number(h.id) === firstId);
+            if (asHija) {
+                this._padreSeleccionadoId = Number(asHija.id_padre);
+                this._categoriasSeleccionadas = [firstId];
+            } else if (padres.some(p => Number(p.id) === firstId)) {
+                this._padreSeleccionadoId = firstId;
+                const tieneHijos = hijas.some(h => Number(h.id_padre) === firstId);
+                if (!tieneHijos) this._categoriasSeleccionadas = [firstId];
+            }
+        }
 
         if (Array.isArray(dPrevios.galeria)) {
             this._galeriaArchivos = dPrevios.galeria.map((item, index) => {
@@ -278,79 +306,154 @@ export const productManager = {
     updateUI() {
         const container = this._mainContainer;
         const d = this._datosTemporales;
-        const seleccionadas = (window.categoriasRaw || []).filter(c => this._categoriasSeleccionadas.includes(c.id));
+        const hijosPadre = this._padreSeleccionadoId != null
+            ? (window.categoriasRaw || []).filter(h => Number(h.id_padre) === Number(this._padreSeleccionadoId))
+            : [];
+        const padreNombre = this._padreSeleccionadoId != null
+            ? (this._categoriasPadresList || []).find(p => Number(p.id) === Number(this._padreSeleccionadoId))?.nombre || ''
+            : '';
+        const selId = this._categoriasSeleccionadas[0];
+        const selObj = selId != null
+            ? ((window.categoriasRaw || []).find(c => Number(c.id) === Number(selId))
+                || (this._categoriasPadresList || []).find(c => Number(c.id) === Number(selId)))
+            : null;
+        const seleccionadas = selObj ? [selObj] : [];
+
+        const previewCategoriasHtml = seleccionadas.length === 0
+            ? `<p class="text-[11px] text-slate-400 leading-relaxed">Sin categorías. Asigna al menos una en el paso <span class="font-medium text-slate-500">Categorías</span>.</p>`
+            : `<div class="flex flex-wrap gap-1.5">${seleccionadas.map(s =>
+                `<span class="inline-flex max-w-full truncate px-2 py-1 rounded-md bg-white border border-slate-200 text-[11px] font-medium text-slate-700 shadow-sm" title="${this._htmlEscape(s.nombre)}">${this._htmlEscape(s.nombre)}</span>`
+            ).join('')}</div>`;
 
         container.innerHTML = `
-        <div class="h-full w-full bg-slate-50/50 overflow-y-auto custom-scrollbar p-6 relative">
+        <div class="h-full min-h-0 w-full flex flex-col overflow-y-auto lg:overflow-hidden bg-slate-100/90 custom-scrollbar px-5 pt-4 pb-5 lg:px-8 lg:pt-5 lg:pb-6">
 
-            <div class="absolute top-4 right-10 z-[100]">
-                <button onclick="window.productManager.cancelarEdicion()"
-                        class="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-100 rounded-xl shadow-sm transition-all group active:scale-95">
-                    <span class="text-[9px] font-black uppercase tracking-tighter">Cancelar y Volver</span>
-                    <span class="material-symbols-outlined text-lg group-hover:rotate-90 transition-transform">close</span>
+            <header class="shrink-0 flex flex-wrap items-center justify-between gap-4 mb-5 lg:mb-6 max-w-[1360px] mx-auto w-full border-b border-slate-200/80 pb-4">
+                <div class="min-w-0 flex-1 pr-2">
+                    <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Editor de producto</p>
+                    <p class="text-sm text-slate-600 mt-0.5">Completa los pasos y revisa la vista previa a la derecha.</p>
+                </div>
+                <button type="button" onclick="window.productManager.cancelarEdicion()"
+                        class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 hover:text-red-700 hover:border-red-200 transition-colors shrink-0 ml-auto lg:ml-0">
+                    <span class="material-symbols-outlined text-[20px] text-slate-500">close</span>
+                    Cerrar
                 </button>
-            </div>
+            </header>
 
-            <div class="max-w-[1400px] mx-auto grid grid-cols-12 gap-10 mt-8">
+            <div class="max-w-[1360px] mx-auto w-full grid grid-cols-12 gap-6 lg:gap-10 lg:flex-1 lg:min-h-0 lg:h-full lg:grid-rows-1 lg:items-stretch">
 
                 <!-- FORMULARIO -->
-                <div class="col-span-12 lg:col-span-7 bg-white rounded-[3rem] shadow-xl border border-slate-100 flex flex-col min-h-[800px]">
+                <div class="col-span-12 lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200/90 flex flex-col min-h-[800px] lg:min-h-0 lg:h-full lg:max-h-full overflow-hidden">
 
-                    <div class="flex bg-slate-50/50 border-b rounded-t-[3rem] overflow-hidden">
+                    <div class="flex shrink-0 items-stretch border-b border-slate-200 bg-slate-50 rounded-t-xl overflow-hidden gap-px">
                         ${this._renderTab(1, 'edit_square', 'Información')}
-                        ${this._renderTab(2, 'account_tree', 'Categorización')}
-                        ${this._renderTab(3, 'media_output', 'Multimedia')}
+                        ${this._renderTab(2, 'account_tree', 'Categorías')}
+                        ${this._renderTab(3, 'perm_media', 'Multimedia')}
                     </div>
 
-                    <div class="p-10 flex-1 overflow-y-auto custom-scrollbar">
+                    <div class="p-6 sm:p-8 flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
 
                         <!-- PASO 1 -->
-                        <div class="${this._pasoActual === 1 ? 'block' : 'hidden'} space-y-6">
-                            <div class="space-y-2">
-                                <label class="text-[10px] font-black uppercase text-slate-400 ml-4">Nombre del Producto</label>
+                        <div class="${this._pasoActual === 1 ? 'block' : 'hidden'} space-y-5">
+                            <div>
+                                <h3 class="text-sm font-semibold text-slate-900 mb-1">Datos generales</h3>
+                                <p class="text-xs text-slate-500 mb-4">Información visible para clientes en catálogo.</p>
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="block text-xs font-medium text-slate-600">Código de producto <span class="text-red-500 font-semibold">*</span></label>
+                                <p class="text-[11px] text-slate-500">13 dígitos numéricos (obligatorio).</p>
+                                <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="13" autocomplete="off"
+                                       value="${d.codigo || ''}"
+                                       oninput="window.productManager.sincronizarCodigo(this)"
+                                       placeholder="Ej. 7790123456789"
+                                       class="w-full bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 font-mono tracking-widest placeholder:text-slate-400 placeholder:tracking-normal outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="block text-xs font-medium text-slate-600">Nombre del producto</label>
                                 <input type="text" value="${d.nombre}" oninput="window.productManager.sync(this,'nombre')"
-                                       class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-6 py-4 font-semibold outline-none focus:border-blue-600 transition-colors">
+                                       class="w-full bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow">
                             </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="space-y-2">
-                                    <label class="text-[10px] font-black uppercase text-slate-400 ml-4">Precio (Bs)</label>
-                                    <input type="number" value="${d.precio}" oninput="window.productManager.sync(this,'precio')"
-                                           class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-6 py-4 font-semibold outline-none focus:border-blue-600 transition-colors">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div class="space-y-1.5">
+                                    <label class="block text-xs font-medium text-slate-600">Precio (Bs)</label>
+                                    <input type="number" step="any" value="${d.precio}" oninput="window.productManager.sync(this,'precio')"
+                                           class="w-full bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow">
                                 </div>
-                                <div class="space-y-2">
-                                    <label class="text-[10px] font-black uppercase text-slate-400 ml-4">Stock</label>
+                                <div class="space-y-1.5">
+                                    <label class="block text-xs font-medium text-slate-600">Stock</label>
                                     <input type="number" value="${d.stock}" oninput="window.productManager.sync(this,'stock')"
-                                           class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-6 py-4 font-semibold outline-none focus:border-blue-600 transition-colors">
+                                           class="w-full bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow">
                                 </div>
                             </div>
-                            <div class="space-y-2">
-                                <label class="text-[10px] font-black uppercase text-slate-400 ml-4">Descripción</label>
+                            <div class="space-y-1.5">
+                                <label class="block text-xs font-medium text-slate-600">Descripción</label>
                                 <textarea oninput="window.productManager.sync(this,'descripcion')"
-                                          class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-6 py-4 h-44 resize-none font-semibold outline-none focus:border-blue-600 transition-colors">${d.descripcion}</textarea>
+                                          rows="5"
+                                          class="w-full bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 resize-y min-h-[7rem] outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-shadow">${d.descripcion}</textarea>
                             </div>
                         </div>
 
                         <!-- PASO 2 -->
-                        <div class="${this._pasoActual === 2 ? 'block' : 'hidden'} space-y-6">
-                            <div class="relative">
-                                <span class="material-symbols-outlined absolute left-4 top-4 text-slate-400">search</span>
-                                <input type="text" placeholder="Filtrar subcategorías..." value="${this._searchTerm}"
-                                       oninput="window.productManager.handleSearch(this)"
-                                       class="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-12 py-4 font-semibold outline-none focus:border-blue-600">
+                        <div class="${this._pasoActual === 2 ? 'block' : 'hidden'} space-y-4">
+                            <div>
+                                <h3 class="text-sm font-semibold text-slate-900 mb-1">Clasificación</h3>
+                                <p class="text-xs text-slate-500">Seleccione la Categoría y si tiene subcategorías, una sola. Si no tiene subcategorias, el producto se asociará a la categoría.</p>
                             </div>
-                            <div class="grid grid-cols-2 gap-6 h-[450px]">
-                                <div id="nexus-resultados-busqueda"
-                                     class="overflow-y-auto bg-slate-50 rounded-[2rem] p-5 border-2 border-dashed border-slate-200">
-                                    <p class="text-center text-slate-400 text-[10px] font-bold mt-10 uppercase">Cargando categorías...</p>
+                            <div class="space-y-1.5">
+                                <div class="flex items-center justify-between gap-2">
+                                    <label class="block text-xs font-medium text-slate-600">Categoría <span class="text-red-500">*</span></label>
+                                    <div class="flex items-center gap-1.5 shrink-0">
+                                        <button type="button" onclick="window.productManager.mostrarFormCrearCategoria()"
+                                                class="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                                                data-tippy-content="Crear nueva categoría">
+                                            <span class="material-symbols-outlined text-[14px]">add_circle</span> Categoría
+                                        </button>
+                                        <button type="button" onclick="window.productManager.mostrarFormCrearSubcategoria()"
+                                                class="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 hover:border-emerald-300 transition-colors"
+                                                data-tippy-content="Crear nueva subcategoría">
+                                            <span class="material-symbols-outlined text-[14px]">add_circle</span> Subcategoría
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="overflow-y-auto bg-blue-50/30 rounded-[2rem] p-5 border border-blue-100">
+                                <select id="pm-select-categoria-padre"
+                                        onchange="window.productManager.onCambioPadre(this.value)"
+                                        class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                    <option value="">— Seleccione una Categoría —</option>
+                                    ${(this._categoriasPadresList || []).map(p => `
+                                        <option value="${p.id}" ${Number(this._padreSeleccionadoId) === Number(p.id) ? 'selected' : ''}>${this._htmlEscape(p.nombre)}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 h-[min(26rem,50vh)] md:h-[26rem]">
+                                <div class="overflow-y-auto custom-scrollbar rounded-lg p-3 bg-slate-50 border border-slate-200 min-h-[8rem]">
+                                    ${this._padreSeleccionadoId == null
+                ? `<p class="text-center text-slate-400 text-xs py-10 px-2">Seleccione una categoría para ver subcategorías o asociar el producto.</p>`
+                : hijosPadre.length === 0
+                    ? `<p class="text-center text-slate-600 text-xs py-10 px-3 leading-relaxed">
+                            <span class="font-semibold text-slate-800">«${this._htmlEscape(padreNombre)}»</span> no tiene subcategorías.
+                            <span class="block mt-2 text-slate-400">El producto quedará vinculado a esta Categoría.</span>
+                       </p>`
+                    : hijosPadre.map(h => {
+                        const activa = Number(this._categoriasSeleccionadas[0]) === Number(h.id);
+                        return `
+                            <button type="button" onclick="window.productManager.toggleHija(${h.id})"
+                                    class="w-full text-left px-3 py-2.5 rounded-md border mb-1.5 transition-colors flex justify-between items-center gap-2
+                                           ${activa ? 'border-blue-500 bg-blue-50 text-blue-900' : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50'}">
+                                <span class="text-xs font-medium">${this._htmlEscape(h.nombre)}</span>
+                                <span class="material-symbols-outlined text-[18px] shrink-0 ${activa ? 'text-blue-600' : 'text-slate-300'}">${activa ? 'check_circle' : 'radio_button_unchecked'}</span>
+                            </button>`;
+                    }).join('')
+            }
+                                </div>
+                                <div class="overflow-y-auto custom-scrollbar rounded-lg p-3 bg-white border border-slate-200 min-h-[8rem]">
+                                    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">Categoría del producto</p>
                                     ${seleccionadas.length === 0
-                ? `<p class="text-center text-slate-400 text-[10px] font-bold mt-10 uppercase">Ninguna seleccionada</p>`
+                ? `<p class="text-center text-slate-400 text-xs py-10">Ninguna categoría seleccionada</p>`
                 : seleccionadas.map(s => `
-                                            <div class="flex justify-between items-center p-4 bg-white rounded-xl mb-2 shadow-sm border border-blue-100">
-                                                <span class="text-[11px] font-black text-slate-700 uppercase">${s.nombre}</span>
-                                                <button onclick="window.productManager.toggleHija(${s.id})" class="text-red-400">
-                                                    <span class="material-symbols-outlined text-base">cancel</span>
+                                            <div class="flex justify-between items-center gap-2 px-3 py-2.5 bg-slate-50 rounded-md border border-slate-200">
+                                                <span class="text-xs font-medium text-slate-800">${this._htmlEscape(s.nombre)}</span>
+                                                <button type="button" onclick="window.productManager.limpiarCategoriaProducto()" class="text-slate-400 hover:text-red-600 p-0.5 rounded transition-colors" title="Quitar">
+                                                    <span class="material-symbols-outlined text-[18px]">close</span>
                                                 </button>
                                             </div>`).join('')
             }
@@ -359,40 +462,37 @@ export const productManager = {
                         </div>
 
                         <!-- PASO 3 -->
-                        <div class="${this._pasoActual === 3 ? 'block' : 'hidden'} space-y-6">
+                        <div class="${this._pasoActual === 3 ? 'block' : 'hidden'} space-y-5">
 
                             <!-- Portada -->
                             <div>
-                                <label class="text-[10px] font-black uppercase text-slate-400 ml-1 mb-2 block">Imagen de Portada</label>
-                                <div class="relative group aspect-video bg-slate-50 rounded-[2.5rem] overflow-hidden border-2 border-dashed border-slate-200 flex items-center justify-center">
+                                <h3 class="text-sm font-semibold text-slate-900 mb-1">Imagen de portada</h3>
+                                <p class="text-xs text-slate-500 mb-3">Se mostrará como imagen principal del producto.</p>
+                                <div class="relative group aspect-video bg-slate-100 rounded-lg overflow-hidden border border-dashed border-slate-300 flex items-center justify-center">
                                     ${this._portadaArchivo.url
-                ? `<img src="${this._portadaArchivo.url}" class="w-full h-full object-cover">`
-                : `<div class="flex flex-col items-center gap-2">
-                                               <span class="material-symbols-outlined text-6xl text-slate-200">add_photo_alternate</span>
-                                               <p class="text-[10px] font-black text-slate-300 uppercase">Pasa el cursor para agregar</p>
+                ? `<img src="${this._portadaArchivo.url}" alt="" class="w-full h-full object-cover">`
+                : `<div class="flex flex-col items-center gap-2 text-slate-400">
+                                               <span class="material-symbols-outlined text-5xl opacity-50">add_photo_alternate</span>
+                                               <p class="text-xs">Pase el cursor para añadir</p>
                                            </div>`
             }
-                                    <div class="absolute inset-0 bg-slate-900/70 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-4">
-                                        <button onclick="window.productManager.cambiarPortada('local')"
-                                                class="flex flex-col items-center gap-1 p-4 bg-white/10 hover:bg-white/25 rounded-2xl text-white transition-all border border-white/20">
-                                            <span class="material-symbols-outlined text-2xl">upload_file</span>
-                                            <span class="text-[9px] font-black uppercase">Subir</span>
+                                    <div class="absolute inset-0 bg-slate-900/75 opacity-0 group-hover:opacity-100 transition-opacity flex flex-wrap items-center justify-center gap-2 p-3">
+                                        <button type="button" onclick="window.productManager.cambiarPortada('local')"
+                                                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-white text-slate-800 text-xs font-medium shadow-sm hover:bg-slate-50">
+                                            <span class="material-symbols-outlined text-[18px]">upload_file</span> Subir
                                         </button>
-                                        <button onclick="window.productManager.cambiarPortada('url')"
-                                                class="flex flex-col items-center gap-1 p-4 bg-white/10 hover:bg-white/25 rounded-2xl text-white transition-all border border-white/20">
-                                            <span class="material-symbols-outlined text-2xl">link</span>
-                                            <span class="text-[9px] font-black uppercase">URL</span>
+                                        <button type="button" onclick="window.productManager.cambiarPortada('url')"
+                                                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-white text-slate-800 text-xs font-medium shadow-sm hover:bg-slate-50">
+                                            <span class="material-symbols-outlined text-[18px]">link</span> URL
                                         </button>
-                                        <button onclick="window.productManager.cambiarPortada('camera')"
-                                                class="flex flex-col items-center gap-1 p-4 bg-white/10 hover:bg-white/25 rounded-2xl text-white transition-all border border-white/20">
-                                            <span class="material-symbols-outlined text-2xl">photo_camera</span>
-                                            <span class="text-[9px] font-black uppercase">Cámara</span>
+                                        <button type="button" onclick="window.productManager.cambiarPortada('camera')"
+                                                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-white text-slate-800 text-xs font-medium shadow-sm hover:bg-slate-50">
+                                            <span class="material-symbols-outlined text-[18px]">photo_camera</span> Cámara
                                         </button>
                                         ${this._portadaArchivo.url ? `
-                                        <button onclick="window.productManager.verPortadaAmpliada()"
-                                                class="flex flex-col items-center gap-1 p-4 bg-white/10 hover:bg-white/25 rounded-2xl text-white transition-all border border-white/20">
-                                            <span class="material-symbols-outlined text-2xl">fullscreen</span>
-                                            <span class="text-[9px] font-black uppercase">Ampliar</span>
+                                        <button type="button" onclick="window.productManager.verPortadaAmpliada()"
+                                                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-white/15 text-white text-xs font-medium border border-white/30 hover:bg-white/25">
+                                            <span class="material-symbols-outlined text-[18px]">fullscreen</span> Ampliar
                                         </button>` : ''}
                                     </div>
                                 </div>
@@ -400,27 +500,27 @@ export const productManager = {
 
                             <!-- Galería -->
                             <div>
-                                <div class="flex items-center justify-between mb-3">
-                                    <label class="text-[10px] font-black uppercase text-slate-400 ml-1">
-                                        Galería
+                                <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-semibold text-slate-900">Galería</span>
                                         ${this._galeriaArchivos.length > 0
-                ? `<span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full text-[9px]">${this._galeriaArchivos.length}</span>`
+                ? `<span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">${this._galeriaArchivos.length}</span>`
                 : ''}
-                                    </label>
+                                    </div>
                                     ${this._galeriaArchivos.length > 1
-                ? `<div class="flex items-center gap-1 text-slate-300">
-                                               <span class="material-symbols-outlined text-sm">drag_indicator</span>
-                                               <span class="text-[9px] font-bold uppercase">Arrastra para reordenar</span>
-                                           </div>` : ''}
+                ? `<span class="text-[11px] text-slate-500 inline-flex items-center gap-1">
+                                               <span class="material-symbols-outlined text-sm text-slate-400">drag_indicator</span>
+                                               Arrastre para reordenar
+                                           </span>` : ''}
                                 </div>
 
-                                <div class="max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                                <div class="max-h-72 overflow-y-auto custom-scrollbar pr-0.5">
                                     ${this._renderGaleriaList()}
                                 </div>
 
-                                <button onclick="window.productManager.addGaleriaManual()"
-                                        class="mt-3 w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all font-black text-[10px] uppercase flex items-center justify-center gap-2">
-                                    <span class="material-symbols-outlined text-lg">add_circle</span> Agregar archivo
+                                <button type="button" onclick="window.productManager.addGaleriaManual()"
+                                        class="mt-3 w-full py-3 border border-dashed border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50/50 transition-colors inline-flex items-center justify-center gap-2">
+                                    <span class="material-symbols-outlined text-[20px]">add</span> Agregar archivo
                                 </button>
                             </div>
                         </div>
@@ -428,40 +528,96 @@ export const productManager = {
                     </div>
 
                     <!-- FOOTER -->
-                    <div class="p-8 bg-slate-50 border-t flex justify-between items-center rounded-b-[3rem]">
-                        <button onclick="window.productManager._pasoActual--; window.productManager.updateUI()"
-                                class="font-black text-[10px] uppercase text-slate-400 hover:text-slate-700 transition-colors flex items-center gap-1 ${this._pasoActual === 1 ? 'invisible' : ''}">
-                            <span class="material-symbols-outlined text-sm">arrow_back</span> Atrás
+                    <div class="px-5 py-4 sm:px-6 bg-slate-50 border-t border-slate-200 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-b-xl">
+                        <button type="button" onclick="window.productManager._pasoActual--; window.productManager.updateUI()"
+                                class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-600 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors ${this._pasoActual === 1 ? 'invisible pointer-events-none' : ''}">
+                            <span class="material-symbols-outlined text-[18px]">arrow_back</span> Atrás
                         </button>
-                        <div class="flex items-center gap-2">
-                            ${[1, 2, 3].map(n => `<div class="h-2 rounded-full transition-all ${n === this._pasoActual ? 'bg-blue-600 w-6' : n < this._pasoActual ? 'bg-blue-300 w-2' : 'bg-slate-200 w-2'}"></div>`).join('')}
+                        <div class="flex items-center gap-1.5 order-last sm:order-none w-full sm:w-auto justify-center sm:justify-start" aria-hidden="true">
+                            ${[1, 2, 3].map(n => `<span class="h-1.5 rounded-full transition-all ${n === this._pasoActual ? 'bg-blue-600 w-6' : n < this._pasoActual ? 'bg-blue-300 w-1.5' : 'bg-slate-300 w-1.5'}"></span>`).join('')}
                         </div>
-                        <button onclick="window.productManager.navSiguiente()"
-                                class="px-10 py-4 bg-blue-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-2">
+                        <button type="button" onclick="window.productManager.navSiguiente()"
+                                class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors">
                             ${this._pasoActual === 3
-                ? `<span class="material-symbols-outlined text-sm">save</span> Guardar`
-                : `Siguiente <span class="material-symbols-outlined text-sm">arrow_forward</span>`}
+                ? `<span class="material-symbols-outlined text-[18px]">save</span> Guardar`
+                : `Siguiente <span class="material-symbols-outlined text-[18px]">arrow_forward</span>`}
                         </button>
                     </div>
                 </div>
 
                 <!-- PREVIEW -->
-                <div class="col-span-12 lg:col-span-5">
-                    <div class="sticky top-12 bg-white rounded-[3.5rem] shadow-2xl overflow-hidden border border-slate-100 transform rotate-1">
-                        <div class="aspect-square bg-slate-100 relative">
-                            ${this._portadaArchivo.url
-                ? `<img src="${this._portadaArchivo.url}" class="w-full h-full object-cover">`
-                : `<div class="w-full h-full flex items-center justify-center"><span class="material-symbols-outlined text-8xl text-slate-200">image</span></div>`
-            }
-                            <div class="absolute top-8 right-8 bg-white/90 backdrop-blur px-5 py-2 rounded-2xl font-black text-blue-600 text-xs shadow-xl uppercase">
-                                STOCK: <span class="preview-stock">${d.stock}</span>
+                <div class="col-span-12 lg:col-span-5 min-h-0 flex flex-col lg:h-full">
+                    <div class="sticky top-4 lg:top-6 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col lg:min-h-0 lg:h-full lg:max-h-full ring-1 ring-slate-900/[0.04]">
+                        <div class="shrink-0 px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
+                                    <span class="material-symbols-outlined text-[18px]">visibility</span>
+                                </span>
+                                <div class="min-w-0">
+                                    <span class="block text-xs font-semibold text-slate-800 tracking-tight">Vista previa</span>
+                                </div>
                             </div>
                         </div>
-                        <div class="p-12 space-y-4">
-                            <h2 class="preview-nombre text-3xl font-black text-slate-900 leading-tight">${d.nombre || 'Nombre del Producto'}</h2>
-                            <div class="preview-price-box pt-4 border-t border-slate-100" style="opacity:${d.price_visible ? '1' : '0'}">
-                                <p class="text-[10px] font-black text-slate-400 uppercase">Inversión</p>
-                                <p class="text-4xl font-black text-slate-900 tracking-tighter">${d.precio || '0.00'} <span class="text-base uppercase">Bs</span></p>
+
+                        <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
+                            <div class="p-4 sm:p-5 flex flex-col gap-4 min-h-full">
+                                <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-[4/3] relative shadow-inner">
+                            ${this._portadaArchivo.url
+                ? `<img src="${this._portadaArchivo.url}" alt="" class="w-full h-full object-cover">`
+                : `<div class="w-full h-full flex flex-col items-center justify-center text-slate-300 bg-slate-50"><span class="material-symbols-outlined text-5xl opacity-35">image</span><span class="text-xs mt-2 text-slate-400 font-medium">Añada una imagen de portada</span></div>`
+            }
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div class="col-span-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+                                        <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Código</span>
+                                        <p class="mt-1 font-mono text-sm font-semibold text-slate-900 tracking-wider tabular-nums break-all">
+                                            <span class="preview-codigo">${d.codigo ? this._htmlEscape(d.codigo) : '—'}</span>
+                                        </p>
+                                    </div>
+                                    <div class="rounded-lg border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+                                        <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Stock</span>
+                                        <p class="mt-1 text-lg font-semibold text-slate-900 tabular-nums leading-none">
+                                            <span class="preview-stock">${d.stock}</span><span class="text-xs font-normal text-slate-500 ml-1">uds.</span>
+                                        </p>
+                                    </div>
+                                    <div class="rounded-lg border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+                                        <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Galería</span>
+                                        <p class="mt-1 text-lg font-semibold text-slate-900 tabular-nums leading-none">
+                                            <span class="preview-galeria-count">${this._galeriaArchivos.length}</span><span class="text-xs font-normal text-slate-500 ml-1">archivos</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <h2 class="preview-nombre text-lg font-semibold text-slate-900 leading-snug break-words">${this._htmlEscape(d.nombre) || 'Nombre del producto'}</h2>
+                                    <p class="text-[11px] text-slate-400">Título público del producto</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Categorías</span>
+                                    <div class="preview-categorias-wrap">${previewCategoriasHtml}</div>
+                                </div>
+
+                                <div class="space-y-1.5 flex-1 min-h-0 flex flex-col">
+                                    <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Descripción</span>
+                                    <div class="preview-descripcion flex-1 min-h-[4.5rem] max-h-36 overflow-y-auto custom-scrollbar rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">${String(d.descripcion || '').trim()
+                ? this._htmlEscape(d.descripcion)
+                : '<span class="text-slate-400 italic">Sin descripción aún</span>'}</div>
+                                </div>
+
+                                <div class="preview-price-box mt-auto pt-4 border-t border-slate-200" style="opacity:${d.price_visible ? '1' : '0'}">
+                                    <div class="flex items-end justify-between gap-3">
+                                        <div>
+                                            <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Precio de venta</p>
+                                            <p class="text-2xl font-semibold text-slate-900 tracking-tight tabular-nums">
+                                                <span class="preview-precio">${this._htmlEscape(d.precio) || '0.00'}</span>
+                                                <span class="text-sm font-medium text-slate-500 ml-1">Bs</span>
+                                            </p>
+                                        </div>
+                                        <span class="material-symbols-outlined text-slate-200 text-4xl hidden sm:block" aria-hidden="true">payments</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -478,9 +634,6 @@ export const productManager = {
             });
         }
 
-        if (this._pasoActual === 2) {
-            this.handleSearch({ value: this._searchTerm });
-        }
     },
 
     // ─────────────────────────────────────────────
@@ -489,15 +642,15 @@ export const productManager = {
     _renderGaleriaList() {
         if (this._galeriaArchivos.length === 0) {
             return `
-            <div class="py-10 text-center border-2 border-dashed border-slate-100 rounded-3xl">
-                <span class="material-symbols-outlined text-4xl text-slate-200">photo_library</span>
-                <p class="text-slate-400 text-[10px] font-black uppercase mt-2">Sin archivos aún</p>
+            <div class="py-12 text-center rounded-lg border border-dashed border-slate-200 bg-slate-50">
+                <span class="material-symbols-outlined text-4xl text-slate-300">photo_library</span>
+                <p class="text-slate-500 text-xs font-medium mt-2">Sin archivos en la galería</p>
             </div>`;
         }
 
-        return `<div id="galeria-drag-container" class="space-y-2">
+        return `<div id="galeria-drag-container" class="space-y-1.5">
             ${this._galeriaArchivos.map((item, index) => `
-            <div class="galeria-item flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-sm transition-all"
+            <div class="galeria-item flex items-center gap-3 p-2.5 bg-white rounded-lg border border-slate-200 hover:border-slate-300 transition-colors"
                  draggable="true"
                  data-id="${item.id}">
 
@@ -508,12 +661,12 @@ export const productManager = {
                 </div>
 
                 <!-- Badge posición -->
-                <div class="flex-shrink-0 w-7 h-7 rounded-lg bg-slate-200 flex items-center justify-center select-none">
-                    <span class="pos-badge text-[11px] font-black text-slate-600 leading-none">${index + 1}</span>
+                <div class="flex-shrink-0 w-7 h-7 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center select-none">
+                    <span class="pos-badge text-[11px] font-semibold text-slate-600 leading-none">${index + 1}</span>
                 </div>
 
                 <!-- Miniatura -->
-                <div class="w-12 h-12 rounded-xl overflow-hidden bg-slate-200 flex-shrink-0 relative pointer-events-none">
+                <div class="w-11 h-11 rounded-md overflow-hidden bg-slate-100 flex-shrink-0 relative pointer-events-none border border-slate-100">
                     <img src="${item.thumb || item.url}" class="w-full h-full object-cover" loading="lazy" draggable="false">
                     ${item.tipo === 'video'
                 ? `<span class="material-symbols-outlined absolute inset-0 flex items-center justify-center text-white bg-black/30 text-base">play_circle</span>`
@@ -522,23 +675,23 @@ export const productManager = {
 
                 <!-- Nombre y tipo -->
                 <div class="flex-1 min-w-0 pointer-events-none select-none">
-                    <p class="text-[10px] font-black text-slate-700 uppercase truncate leading-tight">${item.nombre}</p>
-                    <p class="text-[9px] text-slate-400 font-medium mt-0.5 capitalize">${item.tipo}</p>
+                    <p class="text-xs font-medium text-slate-800 truncate leading-tight">${item.nombre}</p>
+                    <p class="text-[11px] text-slate-500 mt-0.5 capitalize">${item.tipo}</p>
                 </div>
 
                 <!-- Acciones con Tippy (data-tippy-content) -->
                 <div class="flex items-center gap-1 flex-shrink-0">
-                    <button
+                    <button type="button"
                         data-tippy-content="Previsualizar"
                         onclick="window.productManager.verPreviewAmpliado('${item.url}','${item.tipo}')"
-                        class="w-8 h-8 flex items-center justify-center rounded-xl bg-indigo-50 text-indigo-500 border border-indigo-100 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all">
-                        <span class="material-symbols-outlined text-[16px] pointer-events-none">visibility</span>
+                        class="w-8 h-8 flex items-center justify-center rounded-md text-slate-500 border border-slate-200 hover:bg-slate-100 hover:text-slate-800 transition-colors">
+                        <span class="material-symbols-outlined text-[18px] pointer-events-none">visibility</span>
                     </button>
-                    <button
+                    <button type="button"
                         data-tippy-content="Eliminar archivo"
                         onclick="window.productManager.eliminarArchivo('${item.id}')"
-                        class="w-8 h-8 flex items-center justify-center rounded-xl bg-red-50 text-red-400 border border-red-100 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all">
-                        <span class="material-symbols-outlined text-[16px] pointer-events-none">delete</span>
+                        class="w-8 h-8 flex items-center justify-center rounded-md text-slate-500 border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors">
+                        <span class="material-symbols-outlined text-[18px] pointer-events-none">delete</span>
                     </button>
                 </div>
             </div>`).join('')}
@@ -630,10 +783,32 @@ export const productManager = {
     // ─────────────────────────────────────────────
     // SYNC, PORTADA, GALERÍA, CATEGORÍAS
     // ─────────────────────────────────────────────
+    sincronizarCodigo(el) {
+        const solo = String(el?.value ?? '').replace(/\D/g, '').slice(0, 13);
+        if (el) el.value = solo;
+        this._datosTemporales.codigo = solo;
+        const t = document.querySelector('.preview-codigo');
+        if (t) t.textContent = solo || '—';
+    },
+
     sync(el, campo, type = 'text') {
         this._datosTemporales[campo] = type === 'checkbox' ? el.checked : el.value;
-        const map = { nombre: '.preview-nombre', stock: '.preview-stock' };
-        if (map[campo]) { const t = document.querySelector(map[campo]); if (t) t.innerText = el.value || (campo === 'nombre' ? 'Nombre del Producto' : '0'); }
+        const map = { nombre: '.preview-nombre', stock: '.preview-stock', precio: '.preview-precio' };
+        if (map[campo]) {
+            const t = document.querySelector(map[campo]);
+            if (!t) return;
+            if (campo === 'nombre') t.textContent = el.value || 'Nombre del producto';
+            else if (campo === 'stock') t.textContent = el.value === '' ? '0' : el.value;
+            else if (campo === 'precio') t.textContent = (el.value === '' || el.value == null) ? '0.00' : String(el.value);
+        }
+        if (campo === 'descripcion') {
+            const t = document.querySelector('.preview-descripcion');
+            if (t) {
+                const v = (el.value || '').trim();
+                if (!v) t.innerHTML = '<span class="text-slate-400 italic">Sin descripción aún</span>';
+                else t.textContent = v;
+            }
+        }
         if (campo === 'price_visible') { const b = document.querySelector('.preview-price-box'); if (b) b.style.opacity = el.checked ? '1' : '0'; }
     },
 
@@ -719,30 +894,204 @@ export const productManager = {
         this.updateUI();
     },
 
-    handleSearch(el) {
-        this._searchTerm = (el.value || '').toLowerCase();
-        const lista = document.getElementById('nexus-resultados-busqueda');
-        if (!lista) return;
-        const filtradas = (window.categoriasRaw || []).filter(c => {
-            const tiene = c.id_padre !== null && c.id_padre !== undefined && c.id_padre !== 0 && c.id_padre !== '0' && c.id_padre !== '';
-            const coincide = !this._searchTerm || c.nombre.toLowerCase().includes(this._searchTerm);
-            return tiene && coincide;
-        }).slice(0, 10);
-        lista.innerHTML = filtradas.length === 0
-            ? `<p class="text-center text-slate-400 text-[10px] font-bold mt-10 uppercase">Sin resultados</p>`
-            : filtradas.map(h => `
-                <div onclick="window.productManager.toggleHija(${h.id})"
-                     class="p-3 bg-white rounded-xl border-2 cursor-pointer hover:border-blue-600 mb-2 flex justify-between items-center group transition-all">
-                    <p class="text-[11px] font-black text-slate-700 uppercase">${h.nombre}</p>
-                    <span class="material-symbols-outlined text-slate-300 group-hover:text-blue-600 text-sm">add_circle</span>
-                </div>`).join('');
+
+    onCambioPadre(val) {
+        const pid = val === '' || val == null ? null : parseInt(String(val), 10);
+        if (pid == null || Number.isNaN(pid)) {
+            this._padreSeleccionadoId = null;
+            this._categoriasSeleccionadas = [];
+            this.updateUI();
+            return;
+        }
+        this._padreSeleccionadoId = pid;
+        const hijos = (window.categoriasRaw || []).filter(h => Number(h.id_padre) === pid);
+        if (hijos.length === 0) {
+            this._categoriasSeleccionadas = [pid];
+        } else {
+            const cur = this._categoriasSeleccionadas[0];
+            if (cur != null && !hijos.some(h => Number(h.id) === Number(cur))) {
+                this._categoriasSeleccionadas = [];
+            }
+        }
+        this.updateUI();
+    },
+
+    limpiarCategoriaProducto() {
+        this._categoriasSeleccionadas = [];
+        this.updateUI();
     },
 
     toggleHija(id) {
-        this._categoriasSeleccionadas = this._categoriasSeleccionadas.includes(id)
-            ? this._categoriasSeleccionadas.filter(i => i !== id)
-            : [...this._categoriasSeleccionadas, id];
+        const n = Number(id);
+        if (Number(this._categoriasSeleccionadas[0]) === n) this._categoriasSeleccionadas = [];
+        else this._categoriasSeleccionadas = [n];
         this.updateUI();
+    },
+
+    // ─────────────────────────────────────────────
+    // CREAR CATEGORÍA Y SUBCATEGORÍA
+    // ─────────────────────────────────────────────
+    async mostrarFormCrearCategoria() {
+        const { value: formValues } = await Swal.fire({
+            title: '<span class="text-slate-800 font-black uppercase text-sm">Nueva Categoría</span>',
+            html: `
+                <div class="text-left space-y-5 pt-4">
+                    <div class="flex flex-col gap-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre de la Categoría</label>
+                        <input id="swal-nombre-cat" type="text"
+                               class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-2xl p-4 font-semibold focus:ring-2 focus:ring-blue-500/20 outline-none"
+                               placeholder="Ej. Medicamentos, Cosméticos...">
+                    </div>
+                </div>`,
+            showCloseButton: true,
+            showCancelButton: true,
+            confirmButtonText: 'Guardar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            didOpen: () => {
+                const input = document.getElementById('swal-nombre-cat');
+                if (input) input.focus();
+            },
+            customClass: {
+                popup: 'rounded-[32px] border-none shadow-2xl',
+                confirmButton: 'rounded-xl px-6 py-3 font-bold text-sm uppercase bg-blue-600',
+                cancelButton: 'rounded-xl px-6 py-3 font-bold text-sm uppercase bg-slate-100 text-slate-500'
+            },
+            preConfirm: () => {
+                const nombreVal = document.getElementById('swal-nombre-cat').value.trim();
+                if (!nombreVal) {
+                    Swal.showValidationMessage('El nombre es obligatorio');
+                    return false;
+                }
+                return { nombre: nombreVal };
+            }
+        });
+
+        if (formValues) {
+            Swal.fire({
+                title: '<span class="text-slate-800 font-black uppercase text-sm">Creando...</span>',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading(),
+                customClass: { popup: 'rounded-[32px] shadow-xl' }
+            });
+
+            const res = await categoriasModel.crear({ nombre: formValues.nombre, visible: true, id_padre: null });
+            Swal.close();
+
+            if (res.exito) {
+                this._alertExito('Categoría creada con éxito');
+                await this._recargarCategorias();
+            } else {
+                this._alertError('No se pudo crear la categoría');
+            }
+        }
+    },
+
+    async mostrarFormCrearSubcategoria() {
+        if (this._categoriasPadresList.length === 0) {
+            return this._alertError('No hay categorías padre disponibles. Cree primero una categoría.');
+        }
+
+        const optionsPadres = (this._categoriasPadresList || [])
+            .map(p => `<option value="${p.id}">${this._htmlEscape(p.nombre)}</option>`)
+            .join('');
+
+        const svgIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E";
+
+        const { value: formValues } = await Swal.fire({
+            title: '<span class="text-slate-800 font-black uppercase text-sm">Nueva Subcategoría</span>',
+            html: `
+                <div class="text-left space-y-5 pt-4">
+                    <div class="flex flex-col gap-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre de la Subcategoría</label>
+                        <input id="swal-nombre-subcat" type="text"
+                               class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-2xl p-4 font-semibold focus:ring-2 focus:ring-blue-500/20 outline-none"
+                               placeholder="Ej. Analgésicos, Labiales...">
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoría Padre (Obligatorio)</label>
+                        <div class="relative">
+                            <select id="swal-id-padre-subcat"
+                                    style="appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url('${svgIcon}'); background-repeat: no-repeat; background-position: right 1.25rem center; background-size: 1.25rem; padding-right: 3rem;"
+                                    class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-2xl p-4 font-semibold outline-none cursor-pointer shadow-sm hover:border-slate-300 transition-colors">
+                                <option value="">-- Seleccione una categoría --</option>
+                                ${optionsPadres}
+                            </select>
+                        </div>
+                    </div>
+                </div>`,
+            showCloseButton: true,
+            showCancelButton: true,
+            confirmButtonText: 'Guardar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            didOpen: () => {
+                const input = document.getElementById('swal-nombre-subcat');
+                if (input) input.focus();
+            },
+            customClass: {
+                popup: 'rounded-[32px] border-none shadow-2xl',
+                confirmButton: 'rounded-xl px-6 py-3 font-bold text-sm uppercase bg-emerald-600',
+                cancelButton: 'rounded-xl px-6 py-3 font-bold text-sm uppercase bg-slate-100 text-slate-500'
+            },
+            preConfirm: () => {
+                const nombreVal = document.getElementById('swal-nombre-subcat').value.trim();
+                const padreVal = document.getElementById('swal-id-padre-subcat').value;
+                if (!nombreVal) {
+                    Swal.showValidationMessage('El nombre es obligatorio');
+                    return false;
+                }
+                if (!padreVal) {
+                    Swal.showValidationMessage('Debe seleccionar una categoría padre');
+                    return false;
+                }
+                return { nombre: nombreVal, id_padre: parseInt(padreVal) };
+            }
+        });
+
+        if (formValues) {
+            Swal.fire({
+                title: '<span class="text-slate-800 font-black uppercase text-sm">Creando...</span>',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading(),
+                customClass: { popup: 'rounded-[32px] shadow-xl' }
+            });
+
+            const res = await categoriasModel.crear({ nombre: formValues.nombre, visible: true, id_padre: formValues.id_padre });
+            Swal.close();
+
+            if (res.exito) {
+                this._alertExito('Subcategoría creada con éxito');
+                await this._recargarCategorias();
+            } else {
+                this._alertError('No se pudo crear la subcategoría');
+            }
+        }
+    },
+
+    async _recargarCategorias() {
+        try {
+            const [padres, hijas] = await Promise.all([
+                categoriasModel.obtenerPadres(),
+                categoriasModel.obtenerHijas()
+            ]);
+            this._categoriasPadresList = padres;
+            window.categoriasRaw = hijas;
+            this.updateUI();
+        } catch (error) {
+            console.error('Error al recargar categorías:', error);
+        }
+    },
+
+    _alertExito(msg) {
+        Swal.fire({
+            icon: 'success',
+            title: '<span class="text-slate-800 font-black uppercase text-sm">¡Operación Exitosa!</span>',
+            text: msg,
+            timer: 2000,
+            showConfirmButton: false,
+            customClass: { popup: 'rounded-[32px] border-none shadow-xl' }
+        });
     },
 
     // ─────────────────────────────────────────────
@@ -751,19 +1100,28 @@ export const productManager = {
     navSiguiente() {
         const d = this._datosTemporales;
         if (this._pasoActual === 1) {
+            const cod = String(d.codigo || '').replace(/\D/g, '');
+            if (!/^\d{13}$/.test(cod)) return this._alertError('El código de producto debe tener exactamente 13 dígitos numéricos.');
+            d.codigo = cod;
             if (!d.nombre.trim()) return this._alertError('El nombre del producto es obligatorio');
-            if (!d.precio || parseFloat(d.precio) <= 0) return this._alertError('Ingresa un precio válido');
+            if (!d.precio || parseFloat(d.precio) <= 0) return this._alertError('Ingrese un precio válido');
             if (!d.descripcion.trim()) return this._alertError('La descripción es obligatoria');
         }
-        if (this._pasoActual === 2 && this._categoriasSeleccionadas.length === 0)
-            return this._alertError('Selecciona al menos una subcategoría');
+        if (this._pasoActual === 2) {
+            if (this._padreSeleccionadoId == null)
+                return this._alertError('Seleccione una Categoría');
+            if (this._categoriasSeleccionadas.length !== 1)
+                return this._alertError('Debe definir la categoría del producto (subcategoría o la categoría si no tiene subcategorías).');
+        }
 
         if (this._pasoActual === 3) {
             if (!this._portadaArchivo.url) return this._alertError('La portada es obligatoria');
             if (this._galeriaArchivos.length === 0) return this._alertError('La galería no puede estar vacía');
 
             const dataFinal = {
-                id: d.id || null, nombre: d.nombre.trim(),
+                id: d.id || null,
+                codigo: String(d.codigo || '').replace(/\D/g, ''),
+                nombre: d.nombre.trim(),
                 ws_active: d.ws_active ? 1 : 0, price_visible: d.price_visible ? 1 : 0,
                 precio: parseFloat(d.precio) || 0, stock: parseInt(d.stock) || 0,
                 descripcion: d.descripcion.trim(),
@@ -787,11 +1145,11 @@ export const productManager = {
         const active = num === this._pasoActual;
         const done = num < this._pasoActual;
         return `
-        <button onclick="window.productManager._pasoActual=${num}; window.productManager.updateUI()"
-                class="flex-1 py-6 flex flex-col items-center gap-1.5 border-b-4 transition-all
-                       ${active ? 'border-blue-600 text-blue-600 bg-white' : done ? 'border-blue-200 text-blue-400 hover:bg-slate-50' : 'border-transparent text-slate-400 hover:bg-slate-50'}">
-            <span class="material-symbols-outlined text-xl">${done && !active ? 'check_circle' : icon}</span>
-            <span class="text-[9px] font-black uppercase tracking-widest hidden sm:block">${label}</span>
+        <button type="button" onclick="window.productManager._pasoActual=${num}; window.productManager.updateUI()"
+                class="flex-1 flex items-center justify-center gap-2 py-3.5 px-2 text-sm font-medium transition-colors min-w-0
+                       ${active ? 'text-blue-700 bg-white shadow-[inset_0_-2px_0_0_#2563eb]' : done ? 'text-slate-600 hover:bg-white/70' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}">
+            <span class="material-symbols-outlined text-[20px] shrink-0 ${done && !active ? 'text-blue-600' : ''}">${done && !active ? 'check_circle' : icon}</span>
+            <span class="hidden sm:inline truncate">${label}</span>
         </button>`;
     },
 
@@ -802,7 +1160,7 @@ export const productManager = {
     cancelarEdicion() {
         Swal.fire({
             title: '¿Está Seguro de Salir?',
-            text: 'Se perderán los cambios que no hayas guardado.',
+            text: 'Se perderán los cambios no guardados.',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#2563eb',
@@ -820,8 +1178,9 @@ export const productManager = {
                 this._galeriaArchivos = [];
                 this._portadaArchivo = { tipo: 'local', data: null, url: '' };
                 this._categoriasSeleccionadas = [];
+                this._padreSeleccionadoId = null;
+                this._categoriasPadresList = [];
                 this._pasoActual = 1;
-                this._searchTerm = '';
                 // ✅ Limpiar referencias para que popstate no lo detecte como activo
                 this._mainContainer = null;
                 this._originalContent = null;

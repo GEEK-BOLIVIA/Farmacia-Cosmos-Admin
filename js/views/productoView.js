@@ -59,6 +59,15 @@ export const productoView = {
         return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
     },
 
+    _capitalizarCadaPalabra(texto) {
+        if (!texto) return '';
+        return texto
+            .toLowerCase()
+            .split(' ')
+            .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+            .join(' ');
+    },
+
     render(productos, todasLasCategorias = []) {
         const contenedor = document.getElementById('content-area');
         if (!contenedor) return;
@@ -82,53 +91,53 @@ export const productoView = {
         const todosConPrecio = filtrados.length > 0 && filtrados.every(p => p.mostrar_precio);
 
         contenedor.innerHTML = `
-            <div class="p-8 animate-fade-in max-h-[calc(100vh-64px)] overflow-y-auto">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div class="p-4 sm:p-5 lg:p-5 animate-fade-in max-h-[calc(100vh-64px)] overflow-y-auto text-[13px] leading-tight">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 lg:mb-5">
                     <div>
-                        <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Gestión de Inventario</h1>
-                        <p class="text-slate-500 text-sm">Control total de visibilidad y catálogo.</p>
+                        <h1 class="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">Gestión de Inventario</h1>
+                        <p class="text-slate-500 text-xs mt-0.5">Control total de visibilidad y catálogo.</p>
                     </div>
                     <button onclick="productoController.mostrarFormularioCrear()" 
                             title="Agregar nuevo producto al catálogo"
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl transition-all shadow-md font-bold text-sm flex items-center gap-2">
-                        <span class="material-symbols-outlined text-[20px]">add_box</span> Nuevo Producto
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg transition-all shadow-sm font-semibold text-xs flex items-center gap-1.5 shrink-0">
+                        <span class="material-symbols-outlined text-[18px]">add_box</span> Nuevo Producto
                     </button>
                 </div>
 
-                <div class="bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 mb-6 space-y-4">
-                    <div class="flex flex-wrap items-center gap-4">
-                        <div class="relative flex items-center flex-1 min-w-[280px]">
-                            <span class="material-symbols-outlined absolute left-4 text-slate-400">search</span>
+                <div class="bg-slate-50/50 p-3 sm:p-4 rounded-2xl border border-slate-100 mb-4 space-y-3">
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <div class="relative flex items-center flex-1 min-w-[200px]">
+                            <span class="material-symbols-outlined absolute left-3 text-slate-400 text-[18px]">search</span>
                             <input type="text" 
                                    id="main-search-input"
                                    oninput="productoView.gestionarBusqueda(this.value)" 
                                    value="${this._estado.busqueda}"
-                                   class="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-12 text-sm outline-none focus:ring-2 focus:ring-blue-500/10 font-medium transition-all" 
-                                   placeholder="Buscar por nombre, categoría o subcategoría...">
+                                   class="w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-9 text-xs outline-none focus:ring-2 focus:ring-blue-500/10 font-medium transition-all" 
+                                   placeholder="Nombre, código, categoría…">
                             <button id="btn-limpiar-main-search"
                                     onclick="productoView.limpiarBusquedaRapida()"
-                                    class="${this._estado.busqueda ? '' : 'hidden'} absolute right-4 text-slate-300 hover:text-red-500 transition-colors flex items-center justify-center">
-                                <span class="material-symbols-outlined text-lg">cancel</span>
+                                    class="${this._estado.busqueda ? '' : 'hidden'} absolute right-2.5 text-slate-300 hover:text-red-500 transition-colors flex items-center justify-center">
+                                <span class="material-symbols-outlined text-base">cancel</span>
                             </button>
                         </div>
 
-                        <div class="relative w-full md:w-80">
-                            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">sell</span>
+                        <div class="relative w-full sm:w-64 md:w-72">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">sell</span>
                             <input type="text" 
                                    id="category-search-input"
                                    onkeyup="productoView.filtrarSugerencias(this.value)"
                                    onfocus="productoView.filtrarSugerencias(this.value)"
-                                   class="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm outline-none focus:ring-2 focus:ring-blue-500/10 font-medium transition-all" 
-                                   placeholder="Filtrar por categoría específica..."
+                                   class="w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-3 text-xs outline-none focus:ring-2 focus:ring-blue-500/10 font-medium transition-all" 
+                                   placeholder="Filtrar por categoría…"
                                    autocomplete="off">
-                            <div id="suggestions-panel" class="hidden absolute z-[100] w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-60 overflow-y-auto p-2"></div>
+                            <div id="suggestions-panel" class="hidden absolute z-[100] w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto p-1.5 text-xs"></div>
                         </div>
 
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-1.5">
                             <button onclick="productoView.gestionarOrden()" 
                                     title="Cambiar orden alfabético"
-                                    class="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:text-blue-600 transition-all shadow-sm font-bold text-xs uppercase">
-                                <span class="material-symbols-outlined text-lg">${this._estado.orden === 'asc' ? 'sort_by_alpha' : 'text_rotate_vertical'}</span>
+                                    class="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-blue-600 transition-all shadow-sm font-bold text-[10px] uppercase">
+                                <span class="material-symbols-outlined text-base">${this._estado.orden === 'asc' ? 'sort_by_alpha' : 'text_rotate_vertical'}</span>
                                 ${this._estado.orden === 'asc' ? 'A-Z' : 'Z-A'}
                             </button>
                         </div>
@@ -136,38 +145,39 @@ export const productoView = {
 
                     ${this._renderEtiquetasFiltro()}
 
-                    <div class="flex items-center gap-6 bg-white/50 px-6 py-3 rounded-2xl border border-dashed border-slate-200">
-                        <div class="flex items-center gap-3 border-r border-slate-200 pr-6" title="Activar/Desactivar WhatsApp en productos filtrados">
-                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Global WhatsApp</span>
+                    <div class="flex flex-wrap items-center gap-4 sm:gap-5 bg-white/50 px-3 py-2 rounded-xl border border-dashed border-slate-200">
+                        <div class="flex items-center gap-2 border-r border-slate-200 pr-4" title="Activar/Desactivar WhatsApp en productos filtrados">
+                            <span class="text-[9px] font-black text-slate-400 uppercase tracking-tight">Global WhatsApp</span>
                             ${this._renderSwitch('global', 'habilitar_whatsapp', todosConWhatsapp, 'emerald', true)}
                         </div>
-                        <div class="flex items-center gap-3" title="Activar/Desactivar precios en productos filtrados">
-                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Global Precios</span>
+                        <div class="flex items-center gap-2" title="Activar/Desactivar precios en productos filtrados">
+                            <span class="text-[9px] font-black text-slate-400 uppercase tracking-tight">Global Precios</span>
                             ${this._renderSwitch('global', 'mostrar_precio', todosConPrecio, 'blue', true)}
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-white border border-slate-200 rounded-[32px] shadow-sm overflow-hidden mb-8">
+                <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-6">
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
+                        <table class="w-full text-left border-collapse text-sm">
                             <thead>
                                 <tr class="bg-slate-50/80">
-                                    <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase w-32 text-center">
-                                        <div class="flex items-center justify-center gap-2 cursor-pointer"
+                                    <th class="px-2 sm:px-3 py-3 text-[11px] font-black text-slate-400 uppercase w-[4.5rem] sm:w-24 text-center">
+                                        <div class="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 cursor-pointer"
                                             onclick="productoView.toggleSeleccionTodos(window._productosFiltrados || [])">
                                             <input type="checkbox"
                                                 id="checkbox-header"
                                                 class="w-4 h-4 rounded accent-blue-600 cursor-pointer pointer-events-none">
-                                            <span class="text-[9px] font-black text-slate-400 uppercase tracking-wide whitespace-nowrap">Selec. todo</span>
+                                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-wide leading-tight text-center">Sel.</span>
                                         </div>
                                     </th>
-                                    <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase">Producto / Categoría Padre</th>
-                                    <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase text-center">Precio</th>
-                                    <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase text-center">Stock</th>
-                                    <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase text-center">WhatsApp</th>
-                                    <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase text-center">Precio Pub.</th>
-                                    <th class="px-6 py-5 text-[10px] font-black text-slate-400 uppercase text-center w-48">Acciones</th>
+                                    <th class="px-2 sm:px-3 py-3 text-[11px] font-black text-slate-400 uppercase min-w-[10rem]">Producto</th>
+                                    <th class="px-2 sm:px-3 py-3 text-[11px] font-black text-slate-400 uppercase text-center whitespace-nowrap w-[8rem]">Código</th>
+                                    <th class="px-2 sm:px-3 py-3 text-[11px] font-black text-slate-400 uppercase text-center">Precio</th>
+                                    <th class="px-2 sm:px-3 py-3 text-[11px] font-black text-slate-400 uppercase text-center">Stock</th>
+                                    <th class="px-2 sm:px-3 py-3 text-[11px] font-black text-slate-400 uppercase text-center">WhatsApp</th>
+                                    <th class="px-2 sm:px-3 py-3 text-[11px] font-black text-slate-400 uppercase text-center">Pub. Precio</th>
+                                    <th class="px-2 sm:px-3 py-3 text-[11px] font-black text-slate-400 uppercase text-center w-[6.5rem] sm:w-36">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
@@ -211,7 +221,7 @@ export const productoView = {
         const paged = datos.slice(inicio, inicio + this._estado.filasPorPagina);
 
         if (paged.length === 0) return `
-            <tr><td colspan="8" class="px-6 py-12 text-center text-slate-400 italic text-sm">
+            <tr><td colspan="9" class="px-4 py-10 text-center text-slate-400 italic text-xs">
                 No se encontraron productos
             </td></tr>`;
 
@@ -223,49 +233,55 @@ export const productoView = {
 
             return `
                 <tr class="hover:bg-blue-50/40 transition-colors group ${estaSeleccionado ? 'bg-blue-50/60' : ''}">
-                    <td class="px-6 py-5 text-center text-xs font-bold text-slate-400">
-                        <div class="flex items-center justify-center gap-3">
+                    <td class="px-2 sm:px-3 py-3 text-center text-xs font-bold text-slate-400">
+                        <div class="flex flex-col sm:flex-row items-center justify-center gap-1">
                             <input type="checkbox"
-                                   class="fila-checkbox w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                                   class="fila-checkbox w-4 h-4 rounded accent-blue-600 cursor-pointer shrink-0"
                                    data-id="${p.id}"
                                    ${estaSeleccionado ? 'checked' : ''}
                                    onchange="productoView.toggleSeleccion('${p.id}')">
-                            <span>${inicio + i + 1}</span>
+                            <span class="tabular-nums">${inicio + i + 1}</span>
                         </div>
                     </td>
-                    <td class="px-6 py-5">
-                        <div class="flex items-center gap-3">
-                            <img src="${p.imagen_url}" class="h-11 w-11 rounded-xl object-cover border border-slate-100 shadow-sm">
-                            <div class="flex flex-col text-left">
-                                <span class="text-slate-800 font-bold uppercase text-[12px] tracking-wide mb-1 leading-none">${p.nombre}</span>
-                                <span title="Ruta completa: ${p.nombre_categoria || 'General'}" 
-                                      class="px-2 py-0.5 rounded text-[9px] font-black uppercase w-fit ${colorCat} cursor-help">
+                    <td class="px-2 sm:px-3 py-3">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <img src="${p.imagen_url}" class="h-9 w-9 sm:h-10 sm:w-10 rounded-lg object-cover border border-slate-100 shadow-sm shrink-0">
+                            <div class="flex flex-col text-left min-w-0">
+                                <span class="text-slate-800 font-semibold text-xs sm:text-sm leading-tight line-clamp-2">${this._capitalizarCadaPalabra(p.nombre)}</span>
+                                <span title="Ruta completa: ${p.nombre_categoria || 'General'}"
+                                      class="px-2 py-0.5 rounded mt-1 text-[10px] font-bold w-fit max-w-full truncate ${colorCat} cursor-help">
                                     ${nombreMostrarCat}
                                 </span>
                             </div>
                         </div>
                     </td>
-                    <td class="px-6 py-5 text-center font-black text-slate-700 text-sm">Bs. ${p.precio}</td>
-                    <td class="px-6 py-5 text-center">
-                        <span class="px-2 py-1 rounded-lg text-[10px] font-black uppercase ${p.stock > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}">
-                            ${p.stock} UDS
+                    <td class="px-2 sm:px-3 py-3 text-center">
+                        <span class="inline-block font-mono text-xs font-semibold text-slate-700 tracking-wide tabular-nums max-w-[7rem] truncate align-middle" title="Código de producto">${p.codigo != null && String(p.codigo).trim() !== '' ? String(p.codigo) : '—'}</span>
+                    </td>
+                    <td class="px-2 sm:px-3 py-3 text-center font-bold text-slate-700 text-sm whitespace-nowrap">Bs. ${p.precio}</td>
+                    <td class="px-2 sm:px-3 py-3 text-center">
+                        <span class="px-2 py-1 rounded-md text-[10px] font-black uppercase inline-block ${p.stock > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}">
+                            ${p.stock}
                         </span>
                     </td>
-                    <td class="px-6 py-5 text-center">${this._renderSwitch(p.id, 'habilitar_whatsapp', p.habilitar_whatsapp, 'emerald', false, p.nombre)}</td>
-                    <td class="px-6 py-5 text-center">${this._renderSwitch(p.id, 'mostrar_precio', p.mostrar_precio, 'blue', false, p.nombre)}</td>
-                    <td class="px-6 py-4 text-center">
-                        <div class="flex justify-center gap-2 opacity-80 group-hover:opacity-100">
-                            <button onclick="productoController.mostrarFormularioEditar('${p.id}')" 
-                                    class="w-9 h-9 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                                <span class="material-symbols-outlined text-sm">edit</span>
+                    <td class="px-2 sm:px-3 py-3 text-center">${this._renderSwitch(p.id, 'habilitar_whatsapp', p.habilitar_whatsapp, 'emerald', false, p.nombre)}</td>
+                    <td class="px-2 sm:px-3 py-3 text-center">${this._renderSwitch(p.id, 'mostrar_precio', p.mostrar_precio, 'blue', false, p.nombre)}</td>
+                    <td class="px-1 sm:px-2 py-3 text-center">
+                        <div class="flex justify-center gap-0.5 sm:gap-1 opacity-80 group-hover:opacity-100">
+                            <button onclick="productoController.mostrarFormularioEditar('${p.id}')"
+                                    class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                    title="Editar">
+                                <span class="material-symbols-outlined text-[18px]">edit</span>
                             </button>
-                            <button onclick="productoController.verDetalle('${p.id}')" 
-                                    class="w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
-                                <span class="material-symbols-outlined text-sm">visibility</span>
+                            <button onclick="productoController.verDetalle('${p.id}')"
+                                    class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                                    title="Ver">
+                                <span class="material-symbols-outlined text-[18px]">visibility</span>
                             </button>
-                            <button onclick="productoView.confirmarEliminacion('${dataEnc}')" 
-                                    class="w-9 h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-600 hover:text-white transition-all shadow-sm">
-                                <span class="material-symbols-outlined text-sm">delete</span>
+                            <button onclick="productoView.confirmarEliminacion('${dataEnc}')"
+                                    class="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                                    title="Eliminar">
+                                <span class="material-symbols-outlined text-[18px]">delete</span>
                             </button>
                         </div>
                     </td>
@@ -319,7 +335,7 @@ export const productoView = {
                 <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" class="sr-only peer" ${checked} 
                             onclick="event.preventDefault(); productoView.confirmarCambioSwitch(${params})">
-                    <div class="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-${color}-500 shadow-inner"></div>
+                    <div class="w-8 h-[18px] bg-slate-200 rounded-full peer peer-checked:after:translate-x-[14px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-${color}-500 shadow-inner"></div>
                 </label>
             </div>`;
     },
@@ -466,6 +482,7 @@ export const productoView = {
             const t = this._estado.busqueda.toLowerCase();
             resultados = resultados.filter(x =>
                 x.nombre.toLowerCase().includes(t) ||
+                (x.codigo != null && String(x.codigo).toLowerCase().includes(t)) ||
                 (x.nombre_categoria && x.nombre_categoria.toLowerCase().includes(t)) ||
                 (x.categoria_padre_nombre && x.categoria_padre_nombre.toLowerCase().includes(t))
             );

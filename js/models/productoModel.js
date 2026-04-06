@@ -39,6 +39,21 @@ export const productoModel = {
                 }
             });
 
+            const ids = Array.from(mapaProductos.keys());
+            if (ids.length > 0) {
+                const { data: codRows, error: errCod } = await supabase
+                    .from('producto')
+                    .select('id, codigo')
+                    .in('id', ids);
+                if (!errCod && codRows?.length) {
+                    const porId = new Map(codRows.map(r => [r.id, r.codigo]));
+                    ids.forEach(id => {
+                        const prod = mapaProductos.get(id);
+                        if (prod) prod.codigo = porId.get(id) ?? prod.codigo ?? prod.producto_codigo ?? '';
+                    });
+                }
+            }
+
             return Array.from(mapaProductos.values());
 
         } catch (err) {
@@ -52,19 +67,26 @@ export const productoModel = {
      */
     async obtenerPorId(id) {
         try {
-            const { data, error } = await supabase
-                .from('v_productos_detallados')
-                .select('*')
-                .eq('producto_id', id)
-                .limit(1); // Cambiamos .single() por .limit(1)
+            const [{ data, error }, { data: filaBase }] = await Promise.all([
+                supabase
+                    .from('v_productos_detallados')
+                    .select('*')
+                    .eq('producto_id', id)
+                    .limit(1),
+                supabase
+                    .from('producto')
+                    .select('codigo')
+                    .eq('id', id)
+                    .maybeSingle()
+            ]);
 
             if (error) throw error;
 
-            // Verificamos si hay datos y devolvemos el primero
             if (!data || data.length === 0) return null;
 
             const producto = data[0];
-            return { ...producto, id: producto.producto_id };
+            const codigo = filaBase?.codigo ?? producto.codigo ?? producto.producto_codigo ?? '';
+            return { ...producto, id: producto.producto_id, codigo };
         } catch (err) {
             console.error(`Error al obtener producto ${id}:`, err.message);
             return null;
@@ -80,6 +102,9 @@ export const productoModel = {
                 descripcion: cambios.descripcion,
                 precio: cambios.precio !== undefined ? parseFloat(cambios.precio) : undefined,
                 stock: cambios.stock !== undefined ? parseInt(cambios.stock) : undefined,
+                codigo: cambios.codigo !== undefined && cambios.codigo !== null
+                    ? String(cambios.codigo).trim() || null
+                    : undefined,
 
                 // CORRECCIÓN AQUÍ: Acepta tanto 'portada' como 'imagen_url'
                 imagen_url: cambios.imagen_url || cambios.portada,
@@ -116,6 +141,7 @@ export const productoModel = {
      */
     async crear(datos) {
         try {
+            const codigo = datos.codigo != null ? String(datos.codigo).trim() : '';
             const payload = {
                 nombre: datos.nombre ? datos.nombre.trim() : 'Sin Nombre',
                 descripcion: datos.descripcion || '',
@@ -123,6 +149,7 @@ export const productoModel = {
                 precio: parseFloat(datos.precio) || 0,
                 stock: parseInt(datos.stock) || 0,
                 visible: true,
+                codigo: codigo || null,
                 // Mapeo de nombres desde el componente
                 mostrar_precio: datos.price_visible == 1 || datos.price_visible === true,
                 habilitar_whatsapp: datos.ws_active == 1 || datos.ws_active === true
