@@ -577,10 +577,10 @@ export const categoriasView = {
 
     _formatearCelda(columna, valor, item) {
         if (valor === null || valor === undefined) return '<span class="text-slate-300">-</span>';
-        if (columna === 'nombre') return `<span class="text-slate-800 font-bold uppercase text-[13px] tracking-wide block truncate">${valor}</span>`;
+        if (columna === 'nombre') return `<span class="text-slate-800 font-bold text-[13px] tracking-wide block truncate">${valor}</span>`;
         if (columna === 'categoria_padre') {
             const nombrePadre = item.nombre_padre || 'Principal';
-            return `<span class="px-4 py-1.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-black border border-slate-200 uppercase shadow-sm">${nombrePadre}</span>`;
+            return `<span class="px-4 py-1.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-black border border-slate-200 shadow-sm">${nombrePadre}</span>`;
         }
         return valor;
     },
@@ -640,7 +640,7 @@ export const categoriasView = {
             if (result.isConfirmed) {
                 Swal.fire({
                     title: '<span class="text-slate-800 font-black uppercase text-sm">Verificación Final</span>',
-                    text: `¿Estás absolutamente seguro de borrar "${registro.nombre.toUpperCase()}"?`,
+                    text: `¿Estás absolutamente seguro de borrar "${registro.nombre}"?`,
                     icon: 'error',
                     showCancelButton: true,
                     reverseButtons: true,
@@ -704,7 +704,7 @@ export const categoriasView = {
     async mostrarFormulario({ titulo, nombre = '', id_padre = null, categoriasPadre = [] }) {
         const esSubcategoria = this._estado.pestanaActiva === 'subcategorias';
         const options = categoriasPadre
-            .map(cat => `<option value="${cat.id}" ${cat.id === id_padre ? 'selected' : ''}>${cat.nombre.toUpperCase()}</option>`)
+            .map(cat => `<option value="${cat.id}" ${cat.id === id_padre ? 'selected' : ''}>${cat.nombre}</option>`)
             .join('');
 
         const svgIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E";
@@ -715,16 +715,16 @@ export const categoriasView = {
                 <div class="text-left space-y-5 pt-4">
                     <div class="flex flex-col gap-2">
                         <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre</label>
-                        <input id="swal-nombre" type="text" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-2xl p-4 font-semibold uppercase focus:ring-2 focus:ring-blue-500/20 outline-none" value="${nombre}">
+                        <input id="swal-nombre" type="text" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-2xl p-4 font-semibold focus:ring-2 focus:ring-blue-500/20 outline-none" value="${nombre}" placeholder="Ej. Medicamentos, Cosméticos...">
                     </div>
                     ${esSubcategoria ? `
                     <div class="flex flex-col gap-2">
-                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Seleccionar Categoría Padre (Obligatorio)</label>
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Seleccionar Categoría Padre</label>
                         <div class="relative">
-                            <select id="swal-id-padre" 
-                                    style="appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url('${svgIcon}'); background-repeat: no-repeat; background-position: right 1.25rem center; background-size: 1.25rem; padding-right: 3rem;" 
-                                    class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-2xl p-4 font-semibold uppercase outline-none cursor-pointer shadow-sm hover:border-slate-300 transition-colors">
-                                <option value="">-- ELIJA UNA CATEGORÍA --</option>
+                            <select id="swal-id-padre"
+                                    style="appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url('${svgIcon}'); background-repeat: no-repeat; background-position: right 1.25rem center; background-size: 1.25rem; padding-right: 3rem;"
+                                    class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-2xl p-4 font-semibold outline-none cursor-pointer shadow-sm hover:border-slate-300 transition-colors">
+                                <option value="">-- Seleccione una categoría --</option>
                                 ${options}
                             </select>
                         </div>
